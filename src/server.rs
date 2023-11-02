@@ -1,29 +1,28 @@
+pub mod request;
 pub mod response;
 pub mod status_code;
 
 use std::{
     net::{TcpListener, TcpStream},
-    io::{prelude::*, BufReader}
+    io::prelude::*
 };
 
 use self::response::ResponseBuilder;
+use self::request::Request;
 use self::status_code::StatusCode;
 
 pub fn create(port: usize) -> TcpListener {
     let host = format!("localhost:{port}");
-    let stream = TcpListener::bind(host).unwrap();
-    stream
+    println!("Listening on localhost:{port}...");
+
+    let listener = TcpListener::bind(host).unwrap();
+    listener
 }
 
 pub fn handle_connection(mut stream: TcpStream) {
-    let buf_reader = BufReader::new(&mut stream);
+    let request = Request::new(&mut stream);
 
-    // TODO: Handle requests
-    let request_line = buf_reader.lines().next().unwrap().unwrap();
-
-    // let new_line = "\r\n";
-
-    // println!("RECEIVED REQUEST!");
+    request.log();
 
     // let (status_desc, file_path) = match request_line.as_str() {
     //     "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
@@ -39,11 +38,11 @@ pub fn handle_connection(mut stream: TcpStream) {
 
     // let status_desc = "HTTP/1.1 200 OK";
     // let content_length = format!("Content-Length: {}", request_line.len());
-
     let response = ResponseBuilder::new()
         .set_status_code(StatusCode::Ok)
-        .set_protocol("HTTP/1.1".to_owned())
-        .set_content("Hello World!".to_owned())
+        .set_protocol(request.version)
+        .set_content(r#"{ "result": "Hello World!" }"#.to_owned())
+        .set_content_type("application/json".to_owned())
         .build();
 
     stream.write_all(response.format().as_bytes()).unwrap();    
