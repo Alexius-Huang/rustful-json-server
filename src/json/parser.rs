@@ -121,9 +121,8 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                         cur_index = index;
                         cur_char = chars[cur_index];
                         continue;
-                    } else {
-                        return Err(ParseJsonError("JSON object's key must be double quoted string".to_owned()))
                     }
+                    return Err(ParseJsonError("JSON object's key must be double quoted string".to_owned()))
                 },
                 JsonField::Array(_) => (),
                 _ => return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()))
