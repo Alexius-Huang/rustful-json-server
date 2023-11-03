@@ -183,7 +183,6 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::collections::HashMap;
     
     #[test]
     fn it_parses_json_string_into_json_fields() {
@@ -199,18 +198,18 @@ mod test {
             "neg-float": -9.876
         }"#);
 
-        let mut result_obj: JsonObject = HashMap::new();
-        result_obj.insert("hello".to_owned(), JsonField::String("world".to_owned()));
-        result_obj.insert("hi".to_owned(), JsonField::String("I'm fine!".to_owned()));
-        result_obj.insert("is_rust".to_owned(), JsonField::Boolean(true));
-        result_obj.insert("undefined".to_owned(), JsonField::Null);
-        result_obj.insert("age".to_owned(), JsonField::Int(18));
-        result_obj.insert("something-else".to_owned(), JsonField::String("123".to_owned()));
-        result_obj.insert("negative".to_owned(), JsonField::Int(-12));
-        result_obj.insert("float".to_owned(), JsonField::Float(0.123));
-        result_obj.insert("neg-float".to_owned(), JsonField::Float(-9.876));
+        let result_obj = JsonField::new_json_obj();
+        result_obj.insert("hello", JsonField::String("world".to_owned()));
+        result_obj.insert("hi", JsonField::String("I'm fine!".to_owned()));
+        result_obj.insert("is_rust", JsonField::Boolean(true));
+        result_obj.insert("undefined", JsonField::Null);
+        result_obj.insert("age", JsonField::Int(18));
+        result_obj.insert("something-else", JsonField::String("123".to_owned()));
+        result_obj.insert("negative", JsonField::Int(-12));
+        result_obj.insert("float", JsonField::Float(0.123));
+        result_obj.insert("neg-float", JsonField::Float(-9.876));
 
-        assert_eq!(parse_json(&ex, 0), Ok((JsonField::from_json_obj(result_obj), ex.len() - 1)));
+        assert_eq!(parse_json(&ex, 0), Ok((result_obj, ex.len() - 1)));
     }
 
     #[test]
@@ -228,22 +227,22 @@ mod test {
             }
         }"#);
 
-        let mut child_obj: JsonObject = HashMap::new();
-        child_obj.insert("child".to_owned(), JsonField::Int(123));
+        let child_obj = JsonField::new_json_obj();
+        child_obj.insert("child", JsonField::Int(123));
 
-        let mut grandchild_obj: JsonObject = HashMap::new();
-        grandchild_obj.insert("grand-child".to_owned(), JsonField::Float(0.123));
+        let grandchild_obj = JsonField::new_json_obj();
+        grandchild_obj.insert("grand-child", JsonField::Float(0.123));
 
-        let mut child_obj2: JsonObject = HashMap::new();
-        child_obj2.insert("child".to_owned(), JsonField::String("this is nested".to_owned()));
-        child_obj2.insert("child-2".to_owned(), JsonField::from_json_obj(grandchild_obj));
+        let child_obj2 = JsonField::new_json_obj();
+        child_obj2.insert("child", JsonField::String("this is nested".to_owned()));
+        child_obj2.insert("child-2", grandchild_obj);
 
-        let mut result_obj: JsonObject = HashMap::new();
-        result_obj.insert("parent".to_owned(), JsonField::from_json_obj(child_obj));
-        result_obj.insert("prop-in-parent".to_owned(), JsonField::Boolean(true));
-        result_obj.insert("parent-2".to_owned(), JsonField::from_json_obj(child_obj2));
+        let result_obj= JsonField::new_json_obj();
+        result_obj.insert("parent", child_obj);
+        result_obj.insert("prop-in-parent", JsonField::Boolean(true));
+        result_obj.insert("parent-2", child_obj2);
 
-        assert_eq!(parse_json(&ex, 0), Ok((JsonField::from_json_obj(result_obj), ex.len() - 1)));
+        assert_eq!(parse_json(&ex, 0), Ok((result_obj, ex.len() - 1)));
     }
 
     #[test]
@@ -257,20 +256,18 @@ mod test {
             "Hi!"
         ]"#);
 
+        let result = JsonField::new_json_arr();
+        result.push(JsonField::Float(-987.456));
+        result.push(JsonField::Null);
+        result.push(JsonField::String("Hello World".to_owned()));
+        result.push(JsonField::Boolean(false));
+        result.push(JsonField::Int(123));
+        result.push(JsonField::String("Hi!".to_owned()));
+
         assert_eq!(
             parse_json(&ex, 0),
-            Ok((
-                JsonField::from_json_arr(vec![
-                    JsonField::Float(-987.456),
-                    JsonField::Null,
-                    JsonField::String("Hello World".to_owned()),
-                    JsonField::Boolean(false),
-                    JsonField::Int(123),
-                    JsonField::String("Hi!".to_owned())
-                ]),
-                ex.len() - 1
-            ))
-        )
+            Ok((result, ex.len() - 1))
+        );
     }
 
     #[test]
@@ -279,14 +276,13 @@ mod test {
             "numbers": [1, 2, 3]
         }"#);
 
-        let mut result: JsonObject = HashMap::new();
-        result.insert("numbers".to_owned(), JsonField::from_json_arr(vec![
-            JsonField::Int(1),
-            JsonField::Int(2),
-            JsonField::Int(3)
-        ]));
+        let result = JsonField::new_json_obj();
+        let arr = JsonField::new_json_arr();
+        arr.push(JsonField::Int(1));
+        arr.push(JsonField::Int(2));
+        arr.push(JsonField::Int(3));
+        result.insert("numbers", arr);
 
-        let result = JsonField::from_json_obj(result);
         assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
     }
 
@@ -296,11 +292,12 @@ mod test {
             { "prop": 123 }
         ]"#);
 
-        let mut obj: JsonObject = HashMap::new();
-        obj.insert("prop".to_owned(), JsonField::Int(123));
-        let obj = JsonField::from_json_obj(obj);
+        let obj = JsonField::new_json_obj();
+        obj.insert("prop", JsonField::Int(123));
 
-        let result = JsonField::from_json_arr(vec![obj]);
+        let result = JsonField::new_json_arr();
+        result.push(obj);
+
         assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
     }
 
@@ -315,20 +312,19 @@ mod test {
             ]
         }"#);
 
-        let mut arr: JsonArray = vec![];
+        let arr = JsonField::new_json_arr();
         arr.push(JsonField::Int(123));
 
-        let mut child: JsonObject = HashMap::new();
-        child.insert("child".to_owned(), JsonField::Boolean(true));
+        let child = JsonField::new_json_obj();
+        child.insert("child", JsonField::Boolean(true));
 
-        arr.push(JsonField::from_json_obj(child));
+        arr.push(child);
         arr.push(JsonField::Null);
 
-        let mut result: JsonObject = HashMap::new();
-        result.insert("prop".to_owned(), JsonField::String("something".to_owned()));
-        result.insert("arr".to_owned(), JsonField::from_json_arr(arr));
+        let result = JsonField::new_json_obj();
+        result.insert("prop", JsonField::String("something".to_owned()));
+        result.insert("arr", arr);
 
-        let result = JsonField::from_json_obj(result);
         assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
     }
 

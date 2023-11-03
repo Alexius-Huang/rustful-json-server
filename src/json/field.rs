@@ -30,16 +30,26 @@ impl JsonField {
         Self::Object(Rc::new(RefCell::new(HashMap::new())))
     }
 
-    pub fn from_json_obj(obj: JsonObject) -> Self {
-        Self::Object(Rc::new(RefCell::new(obj)))
+    pub fn insert(&self, key: &str, value: Self) {
+        match self {
+            Self::Object(obj) => {
+                obj.borrow_mut().insert(key.to_owned(), value);
+            },
+            _ => panic!("Unable to insert key-value pair to other than JsonField::Object variation")
+        }
     }
 
     pub fn new_json_arr() -> Self {
         Self::Array(Rc::new(RefCell::new(vec![])))
     }
 
-    pub fn from_json_arr(arr: JsonArray) -> Self {
-        Self::Array(Rc::new(RefCell::new(arr)))
+    pub fn push(&self, value: Self) {
+        match self {
+            Self::Array(arr) => {
+                arr.borrow_mut().push(value);
+            },
+            _ => panic!("Unable to push value to other than JsonField::Array variation")
+        }
     }
 
     pub fn is_null(&self) -> bool {
