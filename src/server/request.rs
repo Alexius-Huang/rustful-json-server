@@ -40,7 +40,13 @@ impl Request {
         Self { method, url, version, headers }
     }
 
-    pub fn log(&self) {
+    pub fn log(&self, verbose: bool) {
         println!("{}::{}", self.method, self.url);
+
+        if verbose {
+            for (key, value) in self.headers.iter() {
+                println!("{key}: {value}");
+            }
+        }
     }
 }
