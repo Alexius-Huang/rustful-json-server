@@ -45,38 +45,48 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
     loop {
         match cur_char {
             '{' => {
-                if result.is_null() {
-                    let json_obj = JsonField::new_json_obj();
-                    let json_obj_field = JsonField::Object(json_obj);
-                    result = json_obj_field;
-                } else if json_obj_key.is_empty() {
-                    return Err(ParseJsonError(r#"JSON object key should not be empty string"#.to_owned()));
-                } else {
-                    let child_obj;
-                    (child_obj, cur_index) = parse_json(content, cur_index)?;
-
-                    let key = mem::take(&mut json_obj_key);
-                    match result {
-                        JsonField::Object(ref obj) => {
-                            obj.borrow_mut().insert(key, child_obj);
-                        },
-                        _ => {
-                            return Err(ParseJsonError("TODO: Figure out the error message here".to_owned()));
+                match result {
+                    JsonField::Null => {
+                        let json_obj = JsonField::new_json_obj();
+                        let json_obj_field = JsonField::Object(json_obj);
+                        result = json_obj_field;    
+                    },
+                    JsonField::Object(ref obj) => {
+                        if json_obj_key.is_empty() {
+                            return Err(ParseJsonError(r#"JSON object key should not be empty string"#.to_owned()));
                         }
-                    }
+                        let child_obj;
+                        (child_obj, cur_index) = parse_json(content, cur_index)?;
+                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), child_obj);
+                    },
+                    JsonField::Array(ref arr) => {
+                        let child_obj;
+                        (child_obj, cur_index) = parse_json(content, cur_index)?;
+                        arr.borrow_mut().push(child_obj);
+                    },
+                    _ => panic!("Should never reach here")
                 }
             },
             '}' => return match result {
-                JsonField::Object(field) =>Ok((JsonField::Object(field), cur_index)),
+                JsonField::Object(field) => Ok((JsonField::Object(field), cur_index)),
                 _ => Err(ParseJsonError("Didn't have matched opening curly-brace to this closing curly-brace".to_owned()))
             },
             '[' => {
-                if result.is_null() {
-                    let json_arr: WrappedJsonArray = JsonField::new_json_arr();
-                    let json_arr_field = JsonField::Array(json_arr);
-                    result = json_arr_field;
-                } else {
-                    return Err(ParseJsonError("TODO: Not handled recursive array case yet!".to_owned()));
+                match result {
+                    JsonField::Null => {
+                        let json_arr: WrappedJsonArray = JsonField::new_json_arr();
+                        let json_arr_field = JsonField::Array(json_arr);
+                        result = json_arr_field;    
+                    },
+                    JsonField::Object(ref obj) => {
+                        if json_obj_key.is_empty() {
+                            return Err(ParseJsonError(r#"JSON object key should not be empty string"#.to_owned()));
+                        }
+                        let json_arr;
+                        (json_arr, cur_index) = parse_json(content, cur_index)?;
+                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), json_arr);
+                    },
+                    _ => panic!("Should never reach here!")
                 }
             },
             ']' => return match result {
@@ -274,6 +284,37 @@ mod test {
                 ex.len() - 1
             ))
         )
+    }
+
+    #[test]
+    fn it_parses_object_containing_array() {
+        let ex = String::from(r#"{
+            "numbers": [1, 2, 3]
+        }"#);
+
+        let mut result: JsonObject = HashMap::new();
+        result.insert("numbers".to_owned(), JsonField::Array(Rc::new(RefCell::new(vec![
+            JsonField::Int(1),
+            JsonField::Int(2),
+            JsonField::Int(3)
+        ]))));
+
+        let result = JsonField::Object(Rc::new(RefCell::new(result)));
+        assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
+    }
+
+    #[test]
+    fn it_parses_array_containing_object() {
+        let ex = String::from(r#"[
+            { "prop": 123 }
+        ]"#);
+
+        let mut obj: JsonObject = HashMap::new();
+        obj.insert("prop".to_owned(), JsonField::Int(123));
+        let obj = JsonField::Object(Rc::new(RefCell::new(obj)));
+        let result = JsonField::Array(Rc::new(RefCell::new(vec![obj])));
+
+        assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
     }
 
     #[test]
