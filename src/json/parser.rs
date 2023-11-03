@@ -106,35 +106,30 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                     println!("{value}");
                     obj.borrow_mut().push(JsonField::String(value));
                 },
-                _ => {
-                    return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
-                }
+                _ => return Err(ParseJsonError("TODO: Explain this error!".to_owned()))
             },
-            ',' => {
-                if result.is_null() {
-                    return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()));
-                }
-
-                let peeked_char = peek_next_non_white_space_char(cur_index, &chars);
-                if peeked_char.is_none() {
-                    return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()));
-                }
-
-                let (peeked_char, index) = peeked_char.unwrap();
-                match peeked_char {
-                    '"' => {
+            ',' => match result {
+                JsonField::Object(_) => {
+                    let peeked_char = peek_next_non_white_space_char(cur_index, &chars);
+                    if peeked_char.is_none() {
+                        return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()));
+                    }
+    
+                    let (peeked_char, index) = peeked_char.unwrap();
+                    if peeked_char == '"' {
                         cur_index = index;
                         cur_char = chars[cur_index];
                         continue;
-                    },
-                    _ => {
-                        return Err(ParseJsonError("TODO: ADD ERROR FOR THIS TYPE".to_owned()))
+                    } else {
+                        return Err(ParseJsonError("JSON object's key must be double quoted string".to_owned()))
                     }
-                }
+                },
+                JsonField::Array(_) => (),
+                _ => return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()))
             },
             '-' | '0'..='9' => {
                 if json_obj_key.is_empty() {
-                    return Err(ParseJsonError(format!(r#"Unexpected character: {cur_char}"#).to_owned()));
+                    return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
                 }
 
                 let json_field = number_parser::parse(&mut cur_index, &chars)?;
@@ -153,7 +148,7 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
             },
             'a'..='z' => {
                 if json_obj_key.is_empty() {
-                    return Err(ParseJsonError(format!(r#"Unexpected character: {cur_char}"#).to_owned()));
+                    return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
                 }
 
                 if result.is_null() {
@@ -175,9 +170,7 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                 continue;
             },
             ' ' | '\n' => {},
-            _ => {
-                return Err(ParseJsonError(format!("Unexpected character: {cur_char}").to_owned()));
-            }
+            _ => return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()))
         }
 
         cur_index += 1;
@@ -267,14 +260,16 @@ mod test {
     #[test]
     fn it_parses_array_of_elements() {
         let ex = String::from(r#"[
-            "Hello World"
+            "Hello World",
+            "Hi!"
         ]"#);
 
         assert_eq!(
             parse_json(&ex, 0),
             Ok((
                 JsonField::Array(Rc::new(RefCell::new(vec![
-                    JsonField::String("Hello World".to_owned())
+                    JsonField::String("Hello World".to_owned()),
+                    JsonField::String("Hi!".to_owned())
                 ]))),
                 ex.len() - 1
             ))
@@ -290,6 +285,28 @@ mod test {
         assert_eq!(
             parse_json(&ex, 0),
             Err(ParseJsonError(r#"Unexpected end of JSON, couldn't parse correctly, perhaps missing closing braces "}" or bracket "]""#.to_owned()))
+        );
+    }
+
+    #[test]
+    fn it_does_not_allow_key_without_double_quotes_surrounded() {
+        let ex = String::from(r#"{
+            hello: "world"
+        "#);
+
+        assert_eq!(
+            parse_json(&ex, 0),
+            Err(ParseJsonError(r#"Unexpected character: "h""#.to_owned()))
+        );
+
+        let ex = String::from(r#"{
+            "hello": "world",
+            hi: "How are you?"
+        "#);
+
+        assert_eq!(
+            parse_json(&ex, 0),
+            Err(ParseJsonError(r#"JSON object's key must be double quoted string"#.to_owned()))
         );
     }
 }
