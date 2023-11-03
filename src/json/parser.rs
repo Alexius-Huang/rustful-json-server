@@ -1,5 +1,6 @@
 mod string_parser;
 mod identifier_parser;
+mod number_parser;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -69,7 +70,7 @@ fn parse_json(content: &str) -> ParseJsonResult {
             '[' => {},
             ']' => {},
             '"' => {
-                (parsed_str_segment_cache, cur_index) = string_parser::parse(cur_index, &chars)?;
+                parsed_str_segment_cache = string_parser::parse(&mut cur_index, &chars)?;
 
                 if !json_obj_key.is_empty() {
                     let cur_layer = &layers[layers.len() - 1];
@@ -95,23 +96,33 @@ fn parse_json(content: &str) -> ParseJsonResult {
                 }
 
                 let peeked_char = peek_next_non_white_space_char(cur_index, &chars);
+                if peeked_char.is_none() {
+                    return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()));
+                }
+
+                let (peeked_char, index) = peeked_char.unwrap();
                 match peeked_char {
-                    Some((peeked_char, index)) => {
-                        match peeked_char {
-                            '"' => {
-                                cur_index = index;
-                                cur_char = chars[cur_index];
-                                continue;
-                            },
-                            _ => {
-                                return Err(ParseJsonError("TODO: ADD ERROR FOR THIS TYPE".to_owned()))
-                            }
-                        }
+                    '"' => {
+                        cur_index = index;
+                        cur_char = chars[cur_index];
+                        continue;
                     },
-                    None => {
-                        return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()));
+                    _ => {
+                        return Err(ParseJsonError("TODO: ADD ERROR FOR THIS TYPE".to_owned()))
                     }
                 }
+            },
+            '0'..='9' => {
+                if json_obj_key.is_empty() {
+                    return Err(ParseJsonError(format!(r#"Unexpected character: {cur_char}"#).to_owned()));
+                }
+
+                let json_field = number_parser::parse(&mut cur_index, &chars)?;
+                let cur_layer = &layers[layers.len() - 1];
+                let key = mem::take(&mut json_obj_key);
+                cur_layer.borrow_mut().insert(key, json_field);
+                cur_char = chars[cur_index];
+                continue;
             },
             'a'..='z' => {
                 if json_obj_key.is_empty() {
@@ -122,14 +133,10 @@ fn parse_json(content: &str) -> ParseJsonResult {
                     return Err(ParseJsonError(r#"Must declare JSON object using curly-braces "{{", "}}" before parsing JSON key-value"#.to_owned()));
                 }
 
-                let json_field;
-                (json_field, cur_index) = identifier_parser::parse(cur_index, &chars)?;
-
+                let json_field = identifier_parser::parse(&mut cur_index, &chars)?;
                 let cur_layer = &layers[layers.len() - 1];
-
                 let key = mem::take(&mut json_obj_key);
                 cur_layer.borrow_mut().insert(key, json_field);
-
                 cur_char = chars[cur_index];
                 continue;
             },
@@ -165,13 +172,13 @@ mod test {
             "hello": "world",
             "hi": "I'm fine!",
             "is_rust": true,
-            "undefined": null
+            "undefined": null,
+            "age": 18,
+            "something-else": "123"
         }"#);
 
         /*
-
             TODO: Support rest of the primitives
-            "age": 18,
             "negative": -12,
             "float": 3.123
          */
@@ -181,7 +188,9 @@ mod test {
         result_obj.insert("hi".to_owned(), JsonField::String("I'm fine!".to_owned()));
         result_obj.insert("is_rust".to_owned(), JsonField::Boolean(true));
         result_obj.insert("undefined".to_owned(), JsonField::Null);
-        // result_obj.insert("age".to_owned(), JsonField::Int(18));
+        result_obj.insert("age".to_owned(), JsonField::Int(18));
+        result_obj.insert("something-else".to_owned(), JsonField::String("123".to_owned()));
+        // result_obj.insert("negative".to_owned(), JsonField::Int(-12));
 
         let result_obj: JsonObject = Rc::new(RefCell::new(result_obj));
 
