@@ -35,7 +35,7 @@ impl JsonField {
             Self::Object(obj) => {
                 obj.borrow_mut().insert(key.to_owned(), value);
             },
-            _ => panic!("Unable to insert key-value pair to other than JsonField::Object variation")
+            _ => panic!("Unable to insert key-value pair to other than JsonField::Object variant")
         }
     }
 
@@ -48,7 +48,7 @@ impl JsonField {
             Self::Array(arr) => {
                 arr.borrow_mut().push(value);
             },
-            _ => panic!("Unable to push value to other than JsonField::Array variation")
+            _ => panic!("Unable to push value to other than JsonField::Array variant")
         }
     }
 
