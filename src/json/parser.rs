@@ -2,11 +2,8 @@ mod string_parser;
 mod identifier_parser;
 mod number_parser;
 
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::{fs, mem};
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use super::field::*;
 
@@ -102,8 +99,6 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                 },
                 JsonField::Array(ref obj) => {
                     let value = string_parser::parse(&mut cur_index, &chars)?;  
-                    println!("JHELELELEOEOEOL");
-                    println!("{value}");
                     obj.borrow_mut().push(JsonField::String(value));
                 },
                 _ => return Err(ParseJsonError("TODO: Explain this error!".to_owned()))
@@ -128,20 +123,19 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                 _ => return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()))
             },
             '-' | '0'..='9' => {
-                if json_obj_key.is_empty() {
-                    return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
-                }
-
-                let json_field = number_parser::parse(&mut cur_index, &chars)?;
-                let key = mem::take(&mut json_obj_key);
-
                 match result {
                     JsonField::Object(ref obj) => {
-                        obj.borrow_mut().insert(key, json_field);
+                        if json_obj_key.is_empty() {
+                            return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
+                        }
+                        let json_field = number_parser::parse(&mut cur_index, &chars)?;
+                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), json_field);
                     },
-                    _ => {
-                        return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
-                    }
+                    JsonField::Array(ref arr) => {
+                        let json_field = number_parser::parse(&mut cur_index, &chars)?;
+                        arr.borrow_mut().push(json_field);
+                    },
+                    _ => return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()))
                 }
                 cur_char = chars[cur_index];
                 continue;
@@ -188,7 +182,10 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
 #[cfg(test)]
 mod test {
     use super::*;
-
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+    
     #[test]
     fn it_parses_json_string_into_json_fields() {
         let ex = String::from(r#"{
@@ -260,7 +257,9 @@ mod test {
     #[test]
     fn it_parses_array_of_elements() {
         let ex = String::from(r#"[
+            -987.456
             "Hello World",
+            123,
             "Hi!"
         ]"#);
 
@@ -268,7 +267,9 @@ mod test {
             parse_json(&ex, 0),
             Ok((
                 JsonField::Array(Rc::new(RefCell::new(vec![
+                    JsonField::Float(-987.456),
                     JsonField::String("Hello World".to_owned()),
+                    JsonField::Int(123),
                     JsonField::String("Hi!".to_owned())
                 ]))),
                 ex.len() - 1
