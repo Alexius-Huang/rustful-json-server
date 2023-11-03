@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use super::field::*;
 
-pub fn read_json(path: &PathBuf) -> ParseJsonResult {
+pub fn read_json(path: &PathBuf) -> Result<JsonField, ParseJsonError> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) => {
@@ -15,7 +15,8 @@ pub fn read_json(path: &PathBuf) -> ParseJsonResult {
         }
     };
 
-    parse_json(&content, 0)
+    let (data, _) = parse_json(&content, 0)?;
+    Ok(data)
 }
 
 fn peek_next_non_white_space_char(start_index: usize, chars: &Vec<char>) -> Option<(char, usize)> {

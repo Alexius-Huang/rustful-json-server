@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::fs::DirEntry;
 use std::process;
+// use rustful_json_server::json::parser::read_json;
 use rustful_json_server::server::{
     Server,
     config::Config
@@ -26,18 +27,17 @@ fn main() {
         process::exit(1);
     });
 
-    let schema_file_path = config.jsondb_dir.join("schema.json");
-    let schema_file = match fs::read_to_string(schema_file_path) {
-        Ok(content) => content,
-        Err(error) => {
-            eprintln!("Encounter error while trying to read schema.json: {:?}", error.to_string());
-            println!("Encounter error while trying to read schema.json: {:?}", error.to_string());
-            process::exit(1);
-        }
-    };
-
-    // TODO: Parse Schema File, which means implementing JSON parser
-    println!("{schema_file:?}");
+    // let schema_file_path = config.jsondb_dir.join("schema.json");
+    // let schema_json = read_json(&schema_file_path).unwrap_or_else(|err| {
+    //     eprintln!(
+    //         r#"Unable to read "{:?}": {:?}"#,
+    //         &schema_file_path,
+    //         err
+    //     );
+    //     process::exit(1);        
+    // });
+    // println!("Reading schema.json");
+    // println!("{:?}", schema_json);
 
     let mut file_dir_entries: Vec<DirEntry> = vec![];
     for file in files {
@@ -56,6 +56,18 @@ fn main() {
 
         file_dir_entries.push(file);
         println!("Processing ... {}", file_name);
+
+        // let file_path = config.jsondb_dir.join(file_name);
+        // let json = read_json(&file_path).unwrap_or_else(|err| {
+        //     eprintln!(
+        //         r#"Unable to read "{:?}": {:?}"#,
+        //         &file_path,
+        //         err
+        //     );
+        //     process::exit(1);        
+        // });
+        // println!("Reading {}", file_name);
+        // println!("{:?}", json);    
     }
 
     println!("");
