@@ -43,7 +43,6 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
 
     let len = chars.len();
 
-    // let mut layers: Vec<JsonField> = vec![];
     let mut parsed_str_segment_cache = String::from("");
     let mut json_obj_key = String::from("");
 
@@ -54,12 +53,9 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                     let json_obj: WrappedJsonObject = Rc::new(RefCell::new(HashMap::new()));
                     let json_obj_field = JsonField::Object(json_obj);
                     result = json_obj_field;
-                    // layers.push(result);
+                } else if json_obj_key.is_empty() {
+                    return Err(ParseJsonError(r#"JSON object key should not be empty string"#.to_owned()));
                 } else {
-                    if json_obj_key.is_empty() {
-                        return Err(ParseJsonError(r#"JSON object key should not be empty string"#.to_owned()));
-                    }
-
                     let child_obj;
                     (child_obj, cur_index) = parse_json(content, cur_index)?;
 
@@ -69,7 +65,7 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                             obj.borrow_mut().insert(key, child_obj);
                         },
                         _ => {
-                            return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
+                            return Err(ParseJsonError("TODO: Figure out the error message here".to_owned()));
                         }
                     }
                 }
