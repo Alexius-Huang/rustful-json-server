@@ -43,14 +43,13 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
 
     let len = chars.len();
 
-    let mut parsed_str_segment_cache = String::from("");
     let mut json_obj_key = String::from("");
 
     loop {
         match cur_char {
             '{' => {
                 if result.is_null() {
-                    let json_obj: WrappedJsonObject = Rc::new(RefCell::new(HashMap::new()));
+                    let json_obj = JsonField::new_json_obj();
                     let json_obj_field = JsonField::Object(json_obj);
                     result = json_obj_field;
                 } else if json_obj_key.is_empty() {
@@ -70,42 +69,46 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                     }
                 }
             },
-            '}' => {
-                match result {
-                    JsonField::Object(field) => return Ok((JsonField::Object(field), cur_index)),
-                    _ => {
-                        return Err(ParseJsonError("Didn't have matched opening curly-brace to this closing curly-brace".to_owned()));
-                    }
-                }
+            '}' => return match result {
+                JsonField::Object(field) =>Ok((JsonField::Object(field), cur_index)),
+                _ => Err(ParseJsonError("Didn't have matched opening curly-brace to this closing curly-brace".to_owned()))
             },
-            '[' => {},
-            ']' => {},
-            '"' => {
-                parsed_str_segment_cache = string_parser::parse(&mut cur_index, &chars)?;
-
-                if !json_obj_key.is_empty() {
-                    let key = mem::take(&mut json_obj_key);
-                    let value = mem::take(&mut parsed_str_segment_cache);
-
-                    match result {
-                        JsonField::Object(ref obj) => {
-                            obj.borrow_mut().insert(key, JsonField::String(value));
-                        },
-                        _ => {
-                            return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
-                        }
-                    }
-                }
-            },
-            ':' => {
+            '[' => {
                 if result.is_null() {
-                    return Err(ParseJsonError(r#"Must declare JSON object using curly-braces "{{", "}}" before parsing JSON key-value"#.to_owned()));
+                    let json_arr: WrappedJsonArray = JsonField::new_json_arr();
+                    let json_arr_field = JsonField::Array(json_arr);
+                    result = json_arr_field;
+                } else {
+                    return Err(ParseJsonError("TODO: Not handled recursive array case yet!".to_owned()));
                 }
-
-                if parsed_str_segment_cache.is_empty() {
-                    return Err(ParseJsonError(r#"JSON object key should not be empty string"#.to_owned()));
+            },
+            ']' => return match result {
+                JsonField::Array(arr) => Ok((JsonField::Array(arr), cur_index)),
+                _ => Err(ParseJsonError("Didn't have matched opening bracket to this closing bracket".to_owned()))
+            },
+            '"' => match result {
+                JsonField::Object(ref obj) => {
+                    if json_obj_key.is_empty() {
+                        json_obj_key = string_parser::parse(&mut cur_index, &chars)?;
+                        cur_index += 1;
+                        if chars[cur_index] != ':' {
+                            return Err(ParseJsonError(r#"Expect to have ":" right after JSON object key"#.to_owned()));
+                        }
+                    } else {
+                        let key = mem::take(&mut json_obj_key);
+                        let value = string_parser::parse(&mut cur_index, &chars)?;  
+                        obj.borrow_mut().insert(key, JsonField::String(value));
+                    }
+                },
+                JsonField::Array(ref obj) => {
+                    let value = string_parser::parse(&mut cur_index, &chars)?;  
+                    println!("JHELELELEOEOEOL");
+                    println!("{value}");
+                    obj.borrow_mut().push(JsonField::String(value));
+                },
+                _ => {
+                    return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
                 }
-                mem::swap(&mut json_obj_key, &mut parsed_str_segment_cache);                
             },
             ',' => {
                 if result.is_null() {
@@ -207,9 +210,6 @@ mod test {
             "neg-float": -9.876
         }"#);
 
-        /*
-        */
-
         let mut result_obj: JsonObject = HashMap::new();
         result_obj.insert("hello".to_owned(), JsonField::String("world".to_owned()));
         result_obj.insert("hi".to_owned(), JsonField::String("I'm fine!".to_owned()));
@@ -264,12 +264,10 @@ mod test {
         assert_eq!(parse_json(&ex, 0), Ok((JsonField::Object(result_obj), ex.len() - 1)));
     }
 
-    // TODO: Support Array
-    #[ignore = "Todo"]
     #[test]
     fn it_parses_array_of_elements() {
         let ex = String::from(r#"[
-            "Hello world"
+            "Hello World"
         ]"#);
 
         assert_eq!(
@@ -278,7 +276,7 @@ mod test {
                 JsonField::Array(Rc::new(RefCell::new(vec![
                     JsonField::String("Hello World".to_owned())
                 ]))),
-                123
+                ex.len() - 1
             ))
         )
     }

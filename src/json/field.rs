@@ -26,6 +26,14 @@ pub struct ParseJsonError(pub String);
 pub type ParseJsonResult = Result<(JsonField, usize), ParseJsonError>;
 
 impl JsonField {
+    pub fn new_json_obj() -> WrappedJsonObject {
+        Rc::new(RefCell::new(HashMap::new()))
+    }
+
+    pub fn new_json_arr() -> WrappedJsonArray {
+        Rc::new(RefCell::new(vec![]))
+    }
+
     pub fn is_null(&self) -> bool {
         self == &Self::Null
     }
