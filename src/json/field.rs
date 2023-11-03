@@ -4,7 +4,10 @@ use std::{
     collections::HashMap
 };
 
-pub type JsonObject = Rc<RefCell<HashMap<String, JsonField>>>;
+pub type JsonObject = HashMap<String, JsonField>;
+pub type WrappedJsonObject = Rc<RefCell<JsonObject>>;
+pub type JsonArray = Vec<JsonField>;
+pub type WrappedJsonArray = Rc<RefCell<JsonArray>>;
 
 #[derive(PartialEq, Debug)]
 pub enum JsonField {
@@ -12,15 +15,15 @@ pub enum JsonField {
     Float(f64),
     String(String),
     Boolean(bool),
-    Object(JsonObject),
-    // Array(Box<Vec<Field>>),
+    Object(WrappedJsonObject),
+    Array(WrappedJsonArray),
     Null
 }
 
 #[derive(PartialEq, Debug)]
 pub struct ParseJsonError(pub String);
 
-pub type ParseJsonResult = Result<JsonField, ParseJsonError>;
+pub type ParseJsonResult = Result<(JsonField, usize), ParseJsonError>;
 
 impl JsonField {
     pub fn is_null(&self) -> bool {

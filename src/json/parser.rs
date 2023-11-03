@@ -18,7 +18,7 @@ pub fn read_json(path: &PathBuf) -> ParseJsonResult {
         }
     };
 
-    parse_json(&content)
+    parse_json(&content, 0)
 }
 
 fn peek_next_non_white_space_char(start_index: usize, chars: &Vec<char>) -> Option<(char, usize)> {
@@ -34,35 +34,50 @@ fn peek_next_non_white_space_char(start_index: usize, chars: &Vec<char>) -> Opti
     None
 }
 
-fn parse_json(content: &str) -> ParseJsonResult {
+fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
     let chars: Vec<char> = content.chars().collect();
     let mut result = JsonField::Null;
 
-    let mut cur_index = 0;
+    let mut cur_index = starting_index;
     let mut cur_char = chars[cur_index];
 
     let len = chars.len();
 
-    let mut layers: Vec<JsonObject> = vec![];
+    // let mut layers: Vec<JsonField> = vec![];
     let mut parsed_str_segment_cache = String::from("");
     let mut json_obj_key = String::from("");
 
     loop {
         match cur_char {
             '{' => {
-                let json_obj: JsonObject = Rc::new(RefCell::new(HashMap::new()));
-                layers.push(Rc::clone(&json_obj));
-
-                let json_obj_field = JsonField::Object(json_obj);
-
                 if result.is_null() {
+                    let json_obj: WrappedJsonObject = Rc::new(RefCell::new(HashMap::new()));
+                    let json_obj_field = JsonField::Object(json_obj);
                     result = json_obj_field;
+                    // layers.push(result);
+                } else {
+                    if json_obj_key.is_empty() {
+                        return Err(ParseJsonError(r#"JSON object key should not be empty string"#.to_owned()));
+                    }
+
+                    let child_obj;
+                    (child_obj, cur_index) = parse_json(content, cur_index)?;
+
+                    let key = mem::take(&mut json_obj_key);
+                    match result {
+                        JsonField::Object(ref obj) => {
+                            obj.borrow_mut().insert(key, child_obj);
+                        },
+                        _ => {
+                            return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
+                        }
+                    }
                 }
             },
             '}' => {
-                match layers.pop() {
-                    Some(_) => (),
-                    None => {
+                match result {
+                    JsonField::Object(field) => return Ok((JsonField::Object(field), cur_index)),
+                    _ => {
                         return Err(ParseJsonError("Didn't have matched opening curly-brace to this closing curly-brace".to_owned()));
                     }
                 }
@@ -73,15 +88,21 @@ fn parse_json(content: &str) -> ParseJsonResult {
                 parsed_str_segment_cache = string_parser::parse(&mut cur_index, &chars)?;
 
                 if !json_obj_key.is_empty() {
-                    let cur_layer = &layers[layers.len() - 1];
-
                     let key = mem::take(&mut json_obj_key);
                     let value = mem::take(&mut parsed_str_segment_cache);
-                    cur_layer.borrow_mut().insert(key, JsonField::String(value));
+
+                    match result {
+                        JsonField::Object(ref obj) => {
+                            obj.borrow_mut().insert(key, JsonField::String(value));
+                        },
+                        _ => {
+                            return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
+                        }
+                    }
                 }
             },
             ':' => {
-                if layers.len() == 0 {
+                if result.is_null() {
                     return Err(ParseJsonError(r#"Must declare JSON object using curly-braces "{{", "}}" before parsing JSON key-value"#.to_owned()));
                 }
 
@@ -91,7 +112,7 @@ fn parse_json(content: &str) -> ParseJsonResult {
                 mem::swap(&mut json_obj_key, &mut parsed_str_segment_cache);                
             },
             ',' => {
-                if layers.len() == 0 {
+                if result.is_null() {
                     return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()));
                 }
 
@@ -118,9 +139,16 @@ fn parse_json(content: &str) -> ParseJsonResult {
                 }
 
                 let json_field = number_parser::parse(&mut cur_index, &chars)?;
-                let cur_layer = &layers[layers.len() - 1];
                 let key = mem::take(&mut json_obj_key);
-                cur_layer.borrow_mut().insert(key, json_field);
+
+                match result {
+                    JsonField::Object(ref obj) => {
+                        obj.borrow_mut().insert(key, json_field);
+                    },
+                    _ => {
+                        return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
+                    }
+                }
                 cur_char = chars[cur_index];
                 continue;
             },
@@ -129,14 +157,21 @@ fn parse_json(content: &str) -> ParseJsonResult {
                     return Err(ParseJsonError(format!(r#"Unexpected character: {cur_char}"#).to_owned()));
                 }
 
-                if layers.len() == 0 {
+                if result.is_null() {
                     return Err(ParseJsonError(r#"Must declare JSON object using curly-braces "{{", "}}" before parsing JSON key-value"#.to_owned()));
                 }
 
                 let json_field = identifier_parser::parse(&mut cur_index, &chars)?;
-                let cur_layer = &layers[layers.len() - 1];
                 let key = mem::take(&mut json_obj_key);
-                cur_layer.borrow_mut().insert(key, json_field);
+                match result {
+                    JsonField::Object(ref obj) => {
+                        obj.borrow_mut().insert(key, json_field);
+                    },
+                    _ => {
+                        return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
+                    }
+                }
+
                 cur_char = chars[cur_index];
                 continue;
             },
@@ -155,11 +190,7 @@ fn parse_json(content: &str) -> ParseJsonResult {
         }
     }
 
-    if layers.len() != 0 {
-        Err(ParseJsonError(r#"JSON object isn't closed properly, please close JSON object with "}""#.to_owned()))
-    } else {
-        Ok(result)
-    }
+    Err(ParseJsonError(r#"Unexpected end of JSON, couldn't parse correctly, perhaps missing closing braces "}" or bracket "]""#.to_owned()))
 }
 
 #[cfg(test)]
@@ -176,14 +207,14 @@ mod test {
             "age": 18,
             "something-else": "123",
             "negative": -12,
-            "float": 0.123
+            "float": 0.123,
+            "neg-float": -9.876
         }"#);
 
         /*
-            TODO: Support rest of the primitives
-         */
+        */
 
-        let mut result_obj: HashMap<String, JsonField> = HashMap::new();
+        let mut result_obj: JsonObject = HashMap::new();
         result_obj.insert("hello".to_owned(), JsonField::String("world".to_owned()));
         result_obj.insert("hi".to_owned(), JsonField::String("I'm fine!".to_owned()));
         result_obj.insert("is_rust".to_owned(), JsonField::Boolean(true));
@@ -192,31 +223,69 @@ mod test {
         result_obj.insert("something-else".to_owned(), JsonField::String("123".to_owned()));
         result_obj.insert("negative".to_owned(), JsonField::Int(-12));
         result_obj.insert("float".to_owned(), JsonField::Float(0.123));
+        result_obj.insert("neg-float".to_owned(), JsonField::Float(-9.876));
 
-        let result_obj: JsonObject = Rc::new(RefCell::new(result_obj));
+        let result_obj: WrappedJsonObject = Rc::new(RefCell::new(result_obj));
 
-        assert_eq!(parse_json(&ex), Ok(JsonField::Object(result_obj)));
+        assert_eq!(parse_json(&ex, 0), Ok((JsonField::Object(result_obj), ex.len() - 1)));
     }
 
-    // TODO: Support Nested JSON parsing
-    // #[test]
-    // fn it_parses_nested_json_string_into_json_fields() {
-    //     let ex = String::from(r#"{
-    //         "parent": {
-    //             "child": 123
-    //         }
-    //     }"#);
+    #[test]
+    fn it_parses_nested_json_string_into_json_fields() {
+        let ex = String::from(r#"{
+            "parent": {
+                "child": 123
+            },
+            "prop-in-parent": true,
+            "parent-2": {
+                "child": "this is nested",
+                "child-2": {
+                    "grand-child": 0.123
+                }
+            }
+        }"#);
 
-    //     let mut result_obj: HashMap<String, JsonField> = HashMap::new();
-    //     result_obj.insert("hello".to_owned(), JsonField::String("world".to_owned()));
-    //     result_obj.insert("hi".to_owned(), JsonField::String("I'm fine!".to_owned()));
-    //     result_obj.insert("is_rust".to_owned(), JsonField::Boolean(true));
-    //     result_obj.insert("undefined".to_owned(), JsonField::Null);
+        let mut child_obj: JsonObject = HashMap::new();
+        child_obj.insert("child".to_owned(), JsonField::Int(123));
+        let child_obj: WrappedJsonObject = Rc::new(RefCell::new(child_obj));
 
-    //     let result_obj: JsonObject = Rc::new(RefCell::new(result_obj));
+        let mut grandchild_obj: JsonObject = HashMap::new();
+        grandchild_obj.insert("grand-child".to_owned(), JsonField::Float(0.123));
+        let grandchild_obj: WrappedJsonObject = Rc::new(RefCell::new(grandchild_obj));
 
-    //     assert_eq!(parse_json(&ex), Ok(JsonField::Object(result_obj)));
-    // }
+        let mut child_obj2: JsonObject = HashMap::new();
+        child_obj2.insert("child".to_owned(), JsonField::String("this is nested".to_owned()));
+        child_obj2.insert("child-2".to_owned(), JsonField::Object(grandchild_obj));
+        let child_obj2: WrappedJsonObject = Rc::new(RefCell::new(child_obj2));
+
+        let mut result_obj: JsonObject = HashMap::new();
+        result_obj.insert("parent".to_owned(), JsonField::Object(child_obj));
+        result_obj.insert("prop-in-parent".to_owned(), JsonField::Boolean(true));
+        result_obj.insert("parent-2".to_owned(), JsonField::Object(child_obj2));
+
+        let result_obj: WrappedJsonObject = Rc::new(RefCell::new(result_obj));
+
+        assert_eq!(parse_json(&ex, 0), Ok((JsonField::Object(result_obj), ex.len() - 1)));
+    }
+
+    // TODO: Support Array
+    #[ignore = "Todo"]
+    #[test]
+    fn it_parses_array_of_elements() {
+        let ex = String::from(r#"[
+            "Hello world"
+        ]"#);
+
+        assert_eq!(
+            parse_json(&ex, 0),
+            Ok((
+                JsonField::Array(Rc::new(RefCell::new(vec![
+                    JsonField::String("Hello World".to_owned())
+                ]))),
+                123
+            ))
+        )
+    }
 
     #[test]
     fn it_returns_err_when_json_obj_without_closing_braces() {
@@ -225,8 +294,8 @@ mod test {
         "#);
 
         assert_eq!(
-            parse_json(&ex),
-            Err(ParseJsonError(r#"JSON object isn't closed properly, please close JSON object with "}""#.to_owned()))
+            parse_json(&ex, 0),
+            Err(ParseJsonError(r#"Unexpected end of JSON, couldn't parse correctly, perhaps missing closing braces "}" or bracket "]""#.to_owned()))
         );
     }
 }
