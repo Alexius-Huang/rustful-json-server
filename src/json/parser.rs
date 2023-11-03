@@ -112,7 +112,7 @@ fn parse_json(content: &str) -> ParseJsonResult {
                     }
                 }
             },
-            '0'..='9' => {
+            '-' | '0'..='9' => {
                 if json_obj_key.is_empty() {
                     return Err(ParseJsonError(format!(r#"Unexpected character: {cur_char}"#).to_owned()));
                 }
@@ -174,13 +174,13 @@ mod test {
             "is_rust": true,
             "undefined": null,
             "age": 18,
-            "something-else": "123"
+            "something-else": "123",
+            "negative": -12,
+            "float": 0.123
         }"#);
 
         /*
             TODO: Support rest of the primitives
-            "negative": -12,
-            "float": 3.123
          */
 
         let mut result_obj: HashMap<String, JsonField> = HashMap::new();
@@ -190,7 +190,8 @@ mod test {
         result_obj.insert("undefined".to_owned(), JsonField::Null);
         result_obj.insert("age".to_owned(), JsonField::Int(18));
         result_obj.insert("something-else".to_owned(), JsonField::String("123".to_owned()));
-        // result_obj.insert("negative".to_owned(), JsonField::Int(-12));
+        result_obj.insert("negative".to_owned(), JsonField::Int(-12));
+        result_obj.insert("float".to_owned(), JsonField::Float(0.123));
 
         let result_obj: JsonObject = Rc::new(RefCell::new(result_obj));
 
