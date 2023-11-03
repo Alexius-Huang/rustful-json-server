@@ -47,9 +47,7 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
             '{' => {
                 match result {
                     JsonField::Null => {
-                        let json_obj = JsonField::new_json_obj();
-                        let json_obj_field = JsonField::Object(json_obj);
-                        result = json_obj_field;    
+                        result = JsonField::new_json_obj();
                     },
                     JsonField::Object(ref obj) => {
                         if json_obj_key.is_empty() {
@@ -74,9 +72,7 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
             '[' => {
                 match result {
                     JsonField::Null => {
-                        let json_arr: WrappedJsonArray = JsonField::new_json_arr();
-                        let json_arr_field = JsonField::Array(json_arr);
-                        result = json_arr_field;    
+                        result = JsonField::new_json_arr();
                     },
                     JsonField::Object(ref obj) => {
                         if json_obj_key.is_empty() {
@@ -187,9 +183,7 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::cell::RefCell;
     use std::collections::HashMap;
-    use std::rc::Rc;
     
     #[test]
     fn it_parses_json_string_into_json_fields() {
@@ -216,9 +210,7 @@ mod test {
         result_obj.insert("float".to_owned(), JsonField::Float(0.123));
         result_obj.insert("neg-float".to_owned(), JsonField::Float(-9.876));
 
-        let result_obj: WrappedJsonObject = Rc::new(RefCell::new(result_obj));
-
-        assert_eq!(parse_json(&ex, 0), Ok((JsonField::Object(result_obj), ex.len() - 1)));
+        assert_eq!(parse_json(&ex, 0), Ok((JsonField::from_json_obj(result_obj), ex.len() - 1)));
     }
 
     #[test]
@@ -238,25 +230,20 @@ mod test {
 
         let mut child_obj: JsonObject = HashMap::new();
         child_obj.insert("child".to_owned(), JsonField::Int(123));
-        let child_obj: WrappedJsonObject = Rc::new(RefCell::new(child_obj));
 
         let mut grandchild_obj: JsonObject = HashMap::new();
         grandchild_obj.insert("grand-child".to_owned(), JsonField::Float(0.123));
-        let grandchild_obj: WrappedJsonObject = Rc::new(RefCell::new(grandchild_obj));
 
         let mut child_obj2: JsonObject = HashMap::new();
         child_obj2.insert("child".to_owned(), JsonField::String("this is nested".to_owned()));
-        child_obj2.insert("child-2".to_owned(), JsonField::Object(grandchild_obj));
-        let child_obj2: WrappedJsonObject = Rc::new(RefCell::new(child_obj2));
+        child_obj2.insert("child-2".to_owned(), JsonField::from_json_obj(grandchild_obj));
 
         let mut result_obj: JsonObject = HashMap::new();
-        result_obj.insert("parent".to_owned(), JsonField::Object(child_obj));
+        result_obj.insert("parent".to_owned(), JsonField::from_json_obj(child_obj));
         result_obj.insert("prop-in-parent".to_owned(), JsonField::Boolean(true));
-        result_obj.insert("parent-2".to_owned(), JsonField::Object(child_obj2));
+        result_obj.insert("parent-2".to_owned(), JsonField::from_json_obj(child_obj2));
 
-        let result_obj: WrappedJsonObject = Rc::new(RefCell::new(result_obj));
-
-        assert_eq!(parse_json(&ex, 0), Ok((JsonField::Object(result_obj), ex.len() - 1)));
+        assert_eq!(parse_json(&ex, 0), Ok((JsonField::from_json_obj(result_obj), ex.len() - 1)));
     }
 
     #[test]
@@ -273,14 +260,14 @@ mod test {
         assert_eq!(
             parse_json(&ex, 0),
             Ok((
-                JsonField::Array(Rc::new(RefCell::new(vec![
+                JsonField::from_json_arr(vec![
                     JsonField::Float(-987.456),
                     JsonField::Null,
                     JsonField::String("Hello World".to_owned()),
                     JsonField::Boolean(false),
                     JsonField::Int(123),
                     JsonField::String("Hi!".to_owned())
-                ]))),
+                ]),
                 ex.len() - 1
             ))
         )
@@ -293,13 +280,13 @@ mod test {
         }"#);
 
         let mut result: JsonObject = HashMap::new();
-        result.insert("numbers".to_owned(), JsonField::Array(Rc::new(RefCell::new(vec![
+        result.insert("numbers".to_owned(), JsonField::from_json_arr(vec![
             JsonField::Int(1),
             JsonField::Int(2),
             JsonField::Int(3)
-        ]))));
+        ]));
 
-        let result = JsonField::Object(Rc::new(RefCell::new(result)));
+        let result = JsonField::from_json_obj(result);
         assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
     }
 
@@ -311,9 +298,37 @@ mod test {
 
         let mut obj: JsonObject = HashMap::new();
         obj.insert("prop".to_owned(), JsonField::Int(123));
-        let obj = JsonField::Object(Rc::new(RefCell::new(obj)));
-        let result = JsonField::Array(Rc::new(RefCell::new(vec![obj])));
+        let obj = JsonField::from_json_obj(obj);
 
+        let result = JsonField::from_json_arr(vec![obj]);
+        assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
+    }
+
+    #[test]
+    fn it_parses_composite_object() {
+        let ex = String::from(r#"{
+            "prop": "something",
+            "arr": [
+                123,
+                { "child": true },
+                null
+            ]
+        }"#);
+
+        let mut arr: JsonArray = vec![];
+        arr.push(JsonField::Int(123));
+
+        let mut child: JsonObject = HashMap::new();
+        child.insert("child".to_owned(), JsonField::Boolean(true));
+
+        arr.push(JsonField::from_json_obj(child));
+        arr.push(JsonField::Null);
+
+        let mut result: JsonObject = HashMap::new();
+        result.insert("prop".to_owned(), JsonField::String("something".to_owned()));
+        result.insert("arr".to_owned(), JsonField::from_json_arr(arr));
+
+        let result = JsonField::from_json_obj(result);
         assert_eq!(parse_json(&ex, 0), Ok((result, ex.len() - 1)));
     }
 
