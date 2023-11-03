@@ -141,25 +141,20 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                 continue;
             },
             'a'..='z' => {
-                if json_obj_key.is_empty() {
-                    return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
-                }
-
-                if result.is_null() {
-                    return Err(ParseJsonError(r#"Must declare JSON object using curly-braces "{{", "}}" before parsing JSON key-value"#.to_owned()));
-                }
-
-                let json_field = identifier_parser::parse(&mut cur_index, &chars)?;
-                let key = mem::take(&mut json_obj_key);
                 match result {
                     JsonField::Object(ref obj) => {
-                        obj.borrow_mut().insert(key, json_field);
+                        if json_obj_key.is_empty() {
+                            return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
+                        }
+                        let json_field = identifier_parser::parse(&mut cur_index, &chars)?;
+                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), json_field);
                     },
-                    _ => {
-                        return Err(ParseJsonError("TODO: Explain this error!".to_owned()));
-                    }
+                    JsonField::Array(ref arr) => {
+                        let json_field = identifier_parser::parse(&mut cur_index, &chars)?;
+                        arr.borrow_mut().push(json_field);
+                    },
+                    _ => return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()))
                 }
-
                 cur_char = chars[cur_index];
                 continue;
             },
@@ -257,8 +252,10 @@ mod test {
     #[test]
     fn it_parses_array_of_elements() {
         let ex = String::from(r#"[
-            -987.456
+            -987.456,
+            null,
             "Hello World",
+            false,
             123,
             "Hi!"
         ]"#);
@@ -268,7 +265,9 @@ mod test {
             Ok((
                 JsonField::Array(Rc::new(RefCell::new(vec![
                     JsonField::Float(-987.456),
+                    JsonField::Null,
                     JsonField::String("Hello World".to_owned()),
+                    JsonField::Boolean(false),
                     JsonField::Int(123),
                     JsonField::String("Hi!".to_owned())
                 ]))),
