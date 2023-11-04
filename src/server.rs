@@ -4,10 +4,16 @@ pub mod response;
 pub mod status_code;
 pub mod thread_pool;
 
-use std::{
-    net::{TcpListener, TcpStream},
-    io::prelude::*
-};
+use std::collections::HashSet;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::net::{TcpListener, TcpStream};
+use std::io::prelude::*;
+use std::fs::{self, DirEntry};
+use std::process;
+use std::sync::{Arc, RwLock};
+
+use crate::db::JsonDbConnection;
 
 use self::response::ResponseBuilder;
 use self::request::Request;
@@ -16,9 +22,13 @@ use self::thread_pool::ThreadPool;
 use self::config::Config;
 
 pub struct Server {
+    port: usize,
     listener: TcpListener,
     pool_capacity: Option<usize>,
-    verbose: bool
+    verbose: bool,
+    jsondb_dir: PathBuf,
+    jsondb_connections: Option<Arc<RwLock<Vec<JsonDbConnection>>>>,
+    main_entrypoints: Option<Arc<HashSet<OsString>>>
 }
 
 const DEFAULT_PORT: usize = 5000;
@@ -31,22 +41,34 @@ impl Server {
             None => DEFAULT_PORT
         };
 
-        let mut server = Self::new(port);
+        let mut server = Self::new(port, config.jsondb_dir);
         server.pool_capacity = config.pool_capacity;
         server.verbose = config.verbose;
 
         return server;
     }
 
-    pub fn new(port: usize) -> Self {
+    fn new(
+        port: usize,
+        jsondb_dir: PathBuf
+    ) -> Self {
         let host = format!("localhost:{port}");
-        println!("Listening on localhost:{port}...");
-    
         let listener = TcpListener::bind(host).unwrap();
-        Self { listener, pool_capacity: None, verbose: false }
+
+        Self {
+            port,
+            listener,
+            pool_capacity: None,
+            verbose: false,
+            jsondb_dir,
+            jsondb_connections: None,
+            main_entrypoints: None
+        }
     }
 
-    pub fn start(&self) {
+    pub fn start(&mut self) {
+        self.setup_db_connections();
+
         let pool_capacity = if self.pool_capacity.is_some() {
             self.pool_capacity.unwrap()
         } else {
@@ -54,35 +76,118 @@ impl Server {
         };
 
         let pool = ThreadPool::new(pool_capacity);
+        let main_entrypoints = self.main_entrypoints.as_ref().unwrap();
+        let jsondb_connections = self.jsondb_connections.as_ref().unwrap();
 
+        println!("Listening on localhost:{}...", self.port);
         for stream in self.listener.incoming() {
             let stream = stream.unwrap();
             let verbose = self.verbose;
+            let main_entrypoints = Arc::clone(main_entrypoints);
+            // let jsondb_connections = Arc::clone(jsondb_connections);
 
-            pool.execute(move || {
-                Self::handle_connection(stream, verbose);
-            });
+            pool.execute(move || Self::handle_connection(
+                stream,
+                verbose,
+                main_entrypoints
+                // jsondb_connections
+            ));
         }    
     }
 
-    pub fn handle_connection(mut stream: TcpStream, verbose: bool) {
+    fn setup_db_connections(&mut self) {
+        let files = fs::read_dir(self.jsondb_dir.clone()).unwrap_or_else(|err| {
+            eprintln!(
+                r#"Unable to read directory "{:?}": {}"#,
+                self.jsondb_dir,
+                err
+            );
+            process::exit(1);
+        });
+
+        let mut file_dir_entries: Vec<DirEntry> = vec![];
+        let mut main_entrypoints: HashSet<OsString> = HashSet::new();
+        let mut jsondb_connections: Vec<JsonDbConnection> = vec![];
+
+        println!("=========== Reading JSON ===========");
+        for file in files {
+            let file = file.unwrap_or_else(|err| {
+                eprintln!(
+                    r#"Trying to read files in directory "{:?}", however encountered error: {}"#,
+                    self.jsondb_dir,
+                    err
+                );
+                process::exit(1);
+            });
+    
+            let file_name_os_str = file.file_name();
+            let file_name = file_name_os_str.to_str().unwrap();
+            if !file_name.ends_with(".json") || file_name == "schema.json" { continue; }
+    
+            file_dir_entries.push(file);
+            let file_stem = Path::new(file_name).file_stem().unwrap().to_owned();
+
+            main_entrypoints.insert(file_stem);
+
+            println!("Connecting ... {}", file_name);
+
+            let file_path = self.jsondb_dir.clone().join(file_name);
+            let connection = JsonDbConnection::new(file_path).unwrap_or_else(|err| {
+                eprintln!(
+                    r#"Encounter error while creating JSON database connection: {:?}"#,
+                    err
+                );
+                process::exit(1);                
+            });
+            jsondb_connections.push(connection);
+        }
+        println!("");
+
+        println!("====== Available Entry Points ======");
+
+        println!("");
+        for entrypoint in main_entrypoints.iter() {
+            let entrypoint = entrypoint.to_str().unwrap();
+            println!("    GET :: /{}", entrypoint);
+            println!("   POST :: /{}", entrypoint);
+            println!("    PUT :: /{}/:id", entrypoint);
+            println!("  PATCH :: /{}/:id", entrypoint);
+            println!(" DELETE :: /{}/:id", entrypoint);
+            println!("");
+        }
+
+        self.main_entrypoints = Some(Arc::new(main_entrypoints));
+        self.jsondb_connections = Some(Arc::new(RwLock::new(jsondb_connections)));
+    }
+
+    fn handle_connection(
+        mut stream: TcpStream,
+        verbose: bool,
+        main_entrypoints: Arc<HashSet<OsString>>,
+        // jsondb_connections: Arc<RwLock<Vec<JsonDbConnection>>>
+    ) {
         let request = Request::new(&mut stream);
 
         // TODO: Create logging queue for proper logging
         request.log(verbose);
     
-        // let (status_desc, file_path) = match request_line.as_str() {
-        //     "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
-            // "GET /sleep HTTP/1.1" => {
-            //     /* Simulating Slow Response... */
-            //     thread::sleep(Duration::from_secs(5));
-            //     ("HTTP/1.1 200 OK", "hello.html")
-            // },
-        //     _ => ("HTTP/1.1 404 NOT FOUND", "404.html")
-        // };
-    
-        // let (content_length, contents) = read_content(file_path);
-    
+        let mut path_segment = request.url.iter();
+        path_segment.next();
+
+        let entrypoint = path_segment.next();
+        if entrypoint.is_none() {
+            let response = ResponseBuilder::build_404(request);
+            stream.write_all(response.format().as_bytes()).unwrap();
+            return;
+        }
+
+        let entrypoint = entrypoint.unwrap().to_owned();
+        if !main_entrypoints.contains(&entrypoint) {
+            let response = ResponseBuilder::build_404(request);
+            stream.write_all(response.format().as_bytes()).unwrap();
+            return;
+        }
+
         let response = ResponseBuilder::new()
             .set_status_code(StatusCode::Ok)
             .set_protocol(request.version)

@@ -1,12 +1,14 @@
 use std::{
     collections::HashMap,
     net::TcpStream,
-    io::{prelude::*, BufReader}
+    io::{prelude::*, BufReader},
+    path::PathBuf
 };
 
 pub struct Request {
     pub method: String,
-    pub url: String,
+    pub url: PathBuf,
+    url_string: String,
     pub version: String,
     pub headers: HashMap<String, String>
 }
@@ -22,7 +24,9 @@ impl Request {
         let request_info = message.clone();
         let mut request_info = request_info.split(" ");
         let method = request_info.next().unwrap().to_owned();
-        let url = request_info.next().unwrap().to_owned();
+        let url_str = request_info.next().unwrap();
+        let url = PathBuf::from(url_str);
+        let url_string = url_str.to_owned();
         let version = request_info.next().unwrap().to_owned();
     
         let mut headers: HashMap<String, String> = HashMap::new();
@@ -37,11 +41,11 @@ impl Request {
             headers.insert(header_key.to_owned(), header_value.to_owned());
         }
 
-        Self { method, url, version, headers }
+        Self { method, url, url_string, version, headers }
     }
 
     pub fn log(&self, verbose: bool) {
-        println!("{}::{}", self.method, self.url);
+        println!("{} :: {}", self.method, self.url_string);
 
         if verbose {
             for (key, value) in self.headers.iter() {

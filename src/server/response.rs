@@ -1,4 +1,5 @@
 use super::status_code::StatusCode;
+use super::request::Request;
 
 pub struct Response {
     content_length: usize,
@@ -75,5 +76,14 @@ impl ResponseBuilder {
             status_code: self.status_code,
             protocol: self.protocol
         }
+    }
+
+    pub fn build_404(request: Request) -> Response {
+        Self::new()
+            .set_status_code(StatusCode::NotFound)
+            .set_protocol(request.version)
+            .set_content(r#"{ "message": "404 Not Found" }"#.to_owned())
+            .set_content_type("application/json".to_owned())
+            .build()
     }
 }
