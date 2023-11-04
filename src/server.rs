@@ -4,7 +4,7 @@ pub mod response;
 pub mod status_code;
 pub mod thread_pool;
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::net::{TcpListener, TcpStream};
@@ -27,7 +27,7 @@ pub struct Server {
     pool_capacity: Option<usize>,
     verbose: bool,
     jsondb_dir: PathBuf,
-    jsondb_connections: Option<Arc<RwLock<Vec<JsonDbConnection>>>>,
+    jsondb_connections: Option<Arc<RwLock<HashMap<OsString, JsonDbConnection>>>>,
     main_entrypoints: Option<Arc<HashSet<OsString>>>
 }
 
@@ -84,13 +84,13 @@ impl Server {
             let stream = stream.unwrap();
             let verbose = self.verbose;
             let main_entrypoints = Arc::clone(main_entrypoints);
-            // let jsondb_connections = Arc::clone(jsondb_connections);
+            let jsondb_connections = Arc::clone(jsondb_connections);
 
             pool.execute(move || Self::handle_connection(
                 stream,
                 verbose,
-                main_entrypoints
-                // jsondb_connections
+                main_entrypoints,
+                jsondb_connections
             ));
         }    
     }
@@ -107,7 +107,7 @@ impl Server {
 
         let mut file_dir_entries: Vec<DirEntry> = vec![];
         let mut main_entrypoints: HashSet<OsString> = HashSet::new();
-        let mut jsondb_connections: Vec<JsonDbConnection> = vec![];
+        let mut jsondb_connections: HashMap<OsString, JsonDbConnection> = HashMap::new();
 
         println!("=========== Reading JSON ===========");
         for file in files {
@@ -127,7 +127,7 @@ impl Server {
             file_dir_entries.push(file);
             let file_stem = Path::new(file_name).file_stem().unwrap().to_owned();
 
-            main_entrypoints.insert(file_stem);
+            main_entrypoints.insert(file_stem.clone());
 
             println!("Connecting ... {}", file_name);
 
@@ -139,7 +139,7 @@ impl Server {
                 );
                 process::exit(1);                
             });
-            jsondb_connections.push(connection);
+            jsondb_connections.insert(file_stem, connection);
         }
         println!("");
 
@@ -164,7 +164,7 @@ impl Server {
         mut stream: TcpStream,
         verbose: bool,
         main_entrypoints: Arc<HashSet<OsString>>,
-        // jsondb_connections: Arc<RwLock<Vec<JsonDbConnection>>>
+        jsondb_connections: Arc<RwLock<HashMap<OsString, JsonDbConnection>>>
     ) {
         let request = Request::new(&mut stream);
 
@@ -187,6 +187,12 @@ impl Server {
             stream.write_all(response.format().as_bytes()).unwrap();
             return;
         }
+
+        let connections = jsondb_connections.read().unwrap();
+        let connection = connections.get(&entrypoint).unwrap();
+
+        println!("TODO: convert JsonField to string");
+        println!("{connection:?}");
 
         let response = ResponseBuilder::new()
             .set_status_code(StatusCode::Ok)

@@ -1,8 +1,5 @@
 use std::env;
-use std::fs;
-use std::fs::DirEntry;
 use std::process;
-// use rustful_json_server::json::parser::read_json;
 use rustful_json_server::server::{
     Server,
     config::Config

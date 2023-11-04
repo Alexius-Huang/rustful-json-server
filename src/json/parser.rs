@@ -56,12 +56,12 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                         }
                         let child_obj;
                         (child_obj, cur_index) = parse_json(content, cur_index)?;
-                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), child_obj);
+                        obj.write().unwrap().insert(mem::take(&mut json_obj_key), child_obj);
                     },
                     JsonField::Array(ref arr) => {
                         let child_obj;
                         (child_obj, cur_index) = parse_json(content, cur_index)?;
-                        arr.borrow_mut().push(child_obj);
+                        arr.write().unwrap().push(child_obj);
                     },
                     _ => panic!("Should never reach here")
                 }
@@ -81,7 +81,7 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                         }
                         let json_arr;
                         (json_arr, cur_index) = parse_json(content, cur_index)?;
-                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), json_arr);
+                        obj.write().unwrap().insert(mem::take(&mut json_obj_key), json_arr);
                     },
                     _ => panic!("Should never reach here!")
                 }
@@ -101,12 +101,12 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                     } else {
                         let key = mem::take(&mut json_obj_key);
                         let value = string_parser::parse(&mut cur_index, &chars)?;  
-                        obj.borrow_mut().insert(key, JsonField::String(value));
+                        obj.write().unwrap().insert(key, JsonField::String(value));
                     }
                 },
                 JsonField::Array(ref obj) => {
                     let value = string_parser::parse(&mut cur_index, &chars)?;  
-                    obj.borrow_mut().push(JsonField::String(value));
+                    obj.write().unwrap().push(JsonField::String(value));
                 },
                 _ => return Err(ParseJsonError("TODO: Explain this error!".to_owned()))
             },
@@ -135,11 +135,11 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                             return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
                         }
                         let json_field = number_parser::parse(&mut cur_index, &chars)?;
-                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), json_field);
+                        obj.write().unwrap().insert(mem::take(&mut json_obj_key), json_field);
                     },
                     JsonField::Array(ref arr) => {
                         let json_field = number_parser::parse(&mut cur_index, &chars)?;
-                        arr.borrow_mut().push(json_field);
+                        arr.write().unwrap().push(json_field);
                     },
                     _ => return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()))
                 }
@@ -153,11 +153,11 @@ fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
                             return Err(ParseJsonError(format!(r#"Unexpected character: "{cur_char}""#).to_owned()));
                         }
                         let json_field = identifier_parser::parse(&mut cur_index, &chars)?;
-                        obj.borrow_mut().insert(mem::take(&mut json_obj_key), json_field);
+                        obj.write().unwrap().insert(mem::take(&mut json_obj_key), json_field);
                     },
                     JsonField::Array(ref arr) => {
                         let json_field = identifier_parser::parse(&mut cur_index, &chars)?;
-                        arr.borrow_mut().push(json_field);
+                        arr.write().unwrap().push(json_field);
                     },
                     _ => return Err(ParseJsonError(r#"Unexpected character: ",""#.to_owned()))
                 }
