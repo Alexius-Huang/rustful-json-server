@@ -2,11 +2,36 @@ use std::{
     collections::HashMap,
     net::TcpStream,
     io::{prelude::*, BufReader},
-    path::PathBuf
+    path::PathBuf,
+    convert::From
 };
 
+#[derive(Debug)]
+pub enum RequestMethod {
+    GET,
+    POST,
+    PUT,
+    PATCH,
+    DELETE
+}
+
+impl From<&str> for RequestMethod {
+    fn from(value: &str) -> Self {
+        match value {
+            "GET" => Self::GET,
+            "POST" => Self::POST,
+            "PUT" => Self::PUT,
+            "PATCH" => Self::PATCH,
+            "DELETE" => Self::DELETE,
+            _ => panic!(
+                "Failed to initialize RequstMethod from string"
+            )
+        }
+    }
+}
+
 pub struct Request {
-    pub method: String,
+    pub method: RequestMethod,
     pub url: PathBuf,
     url_string: String,
     pub version: String,
@@ -23,7 +48,8 @@ impl Request {
     
         let request_info = message.clone();
         let mut request_info = request_info.split(" ");
-        let method = request_info.next().unwrap().to_owned();
+        let method = RequestMethod::from(request_info.next().unwrap());
+
         let url_str = request_info.next().unwrap();
         let url = PathBuf::from(url_str);
         let url_string = url_str.to_owned();
@@ -45,7 +71,7 @@ impl Request {
     }
 
     pub fn log(&self, verbose: bool) {
-        println!("{} :: {}", self.method, self.url_string);
+        println!("{:?} :: {}", self.method, self.url_string);
 
         if verbose {
             for (key, value) in self.headers.iter() {

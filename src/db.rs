@@ -13,4 +13,9 @@ impl JsonDbConnection {
 
         Ok(Self { file, json })
     }
+
+    // TODO: Provide option for pretty format JSON
+    pub fn read(&self) -> String {
+        self.json.stringify()
+    }
 }

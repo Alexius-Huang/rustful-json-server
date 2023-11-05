@@ -137,7 +137,7 @@ impl Server {
                     r#"Encounter error while creating JSON database connection: {:?}"#,
                     err
                 );
-                process::exit(1);                
+                process::exit(1);
             });
             jsondb_connections.insert(file_stem, connection);
         }
@@ -149,10 +149,10 @@ impl Server {
         for entrypoint in main_entrypoints.iter() {
             let entrypoint = entrypoint.to_str().unwrap();
             println!("    GET :: /{}", entrypoint);
-            println!("   POST :: /{}", entrypoint);
-            println!("    PUT :: /{}/:id", entrypoint);
-            println!("  PATCH :: /{}/:id", entrypoint);
-            println!(" DELETE :: /{}/:id", entrypoint);
+            // println!("   POST :: /{}", entrypoint);
+            // println!("    PUT :: /{}/:id", entrypoint);
+            // println!("  PATCH :: /{}/:id", entrypoint);
+            // println!(" DELETE :: /{}/:id", entrypoint);
             println!("");
         }
 
@@ -191,13 +191,10 @@ impl Server {
         let connections = jsondb_connections.read().unwrap();
         let connection = connections.get(&entrypoint).unwrap();
 
-        println!("TODO: convert JsonField to string");
-        println!("{connection:?}");
-
         let response = ResponseBuilder::new()
             .set_status_code(StatusCode::Ok)
             .set_protocol(request.version)
-            .set_content(r#"{ "result": "Hello World!" }"#.to_owned())
+            .set_content(connection.read())
             .set_content_type("application/json".to_owned())
             .build();
     
