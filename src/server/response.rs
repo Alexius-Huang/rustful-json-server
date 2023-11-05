@@ -2,7 +2,7 @@ use std::net::TcpStream;
 use std::io::prelude::*;
 
 use super::status_code::StatusCode;
-use super::request::Request;
+
 
 pub struct Response {
     content_length: usize,
