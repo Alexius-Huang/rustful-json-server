@@ -5,15 +5,15 @@ pub mod status_code;
 mod thread_pool;
 mod request_handler;
 
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::net::{TcpListener, TcpStream};
-use std::fs::{self, DirEntry};
+use std::fs;
 use std::process;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-use crate::db::JsonDbConnection;
+use crate::db::JsonDb;
 
 use self::response::Response;
 use self::request::{Request, RequestMethod};
@@ -28,7 +28,7 @@ pub struct Server {
     verbose: bool,
     dry_run: bool,
     jsondb_dir: PathBuf,
-    jsondb_connections: Option<Arc<RwLock<HashMap<OsString, JsonDbConnection>>>>,
+    jsondb: Option<Arc<JsonDb>>,
     main_entrypoints: Option<Arc<HashSet<OsString>>>
 }
 
@@ -64,41 +64,15 @@ impl Server {
             verbose: false,
             dry_run: false,
             jsondb_dir,
-            jsondb_connections: None,
+            jsondb: None,
             main_entrypoints: None
         }
     }
 
     pub fn start(&mut self) {
-        self.setup_db_connections();
+        self.jsondb = Some(Arc::new(JsonDb::new(&self.jsondb_dir, self.dry_run)));
 
-        let pool_capacity = if self.pool_capacity.is_some() {
-            self.pool_capacity.unwrap()
-        } else {
-            DEFAULT_POOL_CAPACITY
-        };
-
-        let pool = ThreadPool::new(pool_capacity);
-        let main_entrypoints = self.main_entrypoints.as_ref().unwrap();
-        let jsondb_connections = self.jsondb_connections.as_ref().unwrap();
-
-        println!("Listening on localhost:{}...", self.port);
-        for stream in self.listener.incoming() {
-            let stream = stream.unwrap();
-            let verbose = self.verbose;
-            let main_entrypoints = Arc::clone(main_entrypoints);
-            let jsondb_connections = Arc::clone(jsondb_connections);
-
-            pool.execute(move || Self::handle_connection(
-                stream,
-                verbose,
-                main_entrypoints,
-                jsondb_connections
-            ));
-        }    
-    }
-
-    fn setup_db_connections(&mut self) {
+        let mut main_entrypoints: HashSet<OsString> = HashSet::new();
         let files = fs::read_dir(self.jsondb_dir.clone()).unwrap_or_else(|err| {
             eprintln!(
                 r#"Unable to read directory "{:?}": {}"#,
@@ -108,50 +82,17 @@ impl Server {
             process::exit(1);
         });
 
-        let mut file_dir_entries: Vec<DirEntry> = vec![];
-        let mut main_entrypoints: HashSet<OsString> = HashSet::new();
-        let mut jsondb_connections: HashMap<OsString, JsonDbConnection> = HashMap::new();
-
-        println!("=========== Reading JSON ===========");
         for file in files {
-            let file = file.unwrap_or_else(|err| {
-                eprintln!(
-                    r#"Trying to read files in directory "{:?}", however encountered error: {}"#,
-                    self.jsondb_dir,
-                    err
-                );
-                process::exit(1);
-            });
-    
+            let file = file.unwrap();
             let file_name_os_str = file.file_name();
             let file_name = file_name_os_str.to_str().unwrap();
             if !file_name.ends_with(".json") || file_name == "schema.json" { continue; }
-    
-            file_dir_entries.push(file);
+
             let file_stem = Path::new(file_name).file_stem().unwrap().to_owned();
 
             main_entrypoints.insert(file_stem.clone());
-
-            println!("Connecting ... {}", file_name);
-
-            let file_path = self.jsondb_dir.clone().join(file_name);
-            let mut connection = JsonDbConnection::new(file_path).unwrap_or_else(|err| {
-                eprintln!(
-                    r#"Encounter error while creating JSON database connection: {:?}"#,
-                    err
-                );
-                process::exit(1);
-            });
-
-            if self.dry_run { connection.dry_run(); }
-
-            jsondb_connections.insert(file_stem, connection);
         }
-        println!("");
 
-        println!("====== Available Entry Points ======");
-
-        println!("");
         for entrypoint in main_entrypoints.iter() {
             let entrypoint = entrypoint.to_str().unwrap();
             println!("    GET :: /{}", entrypoint);
@@ -163,14 +104,37 @@ impl Server {
         }
 
         self.main_entrypoints = Some(Arc::new(main_entrypoints));
-        self.jsondb_connections = Some(Arc::new(RwLock::new(jsondb_connections)));
+
+        let pool_capacity = if self.pool_capacity.is_some() {
+            self.pool_capacity.unwrap()
+        } else {
+            DEFAULT_POOL_CAPACITY
+        };
+
+        let pool = ThreadPool::new(pool_capacity);
+        let main_entrypoints = self.main_entrypoints.as_ref().unwrap();
+
+        println!("Listening on localhost:{}...", self.port);
+        for stream in self.listener.incoming() {
+            let stream = stream.unwrap();
+            let verbose = self.verbose;
+            let main_entrypoints = Arc::clone(main_entrypoints);
+            let jsondb = Arc::clone(self.jsondb.as_ref().unwrap());
+
+            pool.execute(move || Self::handle_connection(
+                stream,
+                verbose,
+                main_entrypoints,
+                jsondb
+            ));
+        }    
     }
 
     fn handle_connection(
         mut stream: TcpStream,
         verbose: bool,
         main_entrypoints: Arc<HashSet<OsString>>,
-        jsondb_connections: Arc<RwLock<HashMap<OsString, JsonDbConnection>>>
+        jsondb: Arc<JsonDb>
     ) {
         let request = Request::new(&mut stream);
 
@@ -190,18 +154,17 @@ impl Server {
             return Response::not_found(request, stream);
         }
 
+        let connection = Arc::clone(&jsondb.get_entry(entrypoint));
         match request.method {
             RequestMethod::GET => request_handler::get(
                 request,
                 stream,
-                entrypoint,
-                jsondb_connections
+                connection
             ),
             RequestMethod::POST => request_handler::post(
                 request,
                 stream,
-                entrypoint,
-                jsondb_connections
+                connection
             ),
             _ => return Response::not_found(request, stream)
         }

@@ -1,40 +1,47 @@
-use std::{path::PathBuf, fs};
-use crate::json::{field::{JsonField, ParseJsonError}, parser::read_json};
+pub mod connection;
 
-#[derive(Debug)]
-pub struct JsonDbConnection {
-    file: PathBuf,
-    json: JsonField,
-    dry_run: bool
+use std::{
+    path::{PathBuf, Path},
+    fs,
+    collections::HashMap,
+    ffi::OsString,
+    sync::{Arc, RwLock}
+};
+use self::connection::Connection;
+
+pub struct JsonDb {
+    connections: HashMap<OsString, Arc<RwLock<Connection>>>
 }
 
-impl JsonDbConnection {
-    pub fn new(file: PathBuf) -> Result<Self, ParseJsonError> {
-        let json = read_json(&file)?;
+impl JsonDb {
+    pub fn new(root_dir: &PathBuf, dry_run: bool) -> Self {
+        let files = fs::read_dir(root_dir.clone()).unwrap();
+        let mut connections = HashMap::new();
 
-        Ok(Self { file, json, dry_run: false })
-    }
+        println!("=========== Reading JSON ===========");
+        for file in files {  
+            let file_name_os_str = file.unwrap().file_name();
+            let file_name = file_name_os_str.to_str().unwrap();
+            if !file_name.ends_with(".json") || file_name == "schema.json" { continue; }
+    
+            let file_stem = Path::new(file_name).file_stem().unwrap().to_owned();
 
-    pub fn dry_run(&mut self) {
-        self.dry_run = true;
-    }
+            println!("Connecting ... {}", file_name);
 
-    // TODO: Provide option for pretty format JSON
-    pub fn read(&self) -> String {
-        self.json.stringify()
-    }
+            let file_path = root_dir.join(file_name);
+            let mut connection = Connection::new(file_path).unwrap();
 
-    pub fn insert(&self, field: JsonField) -> String {
-        // TODO: Generate Unique ID
-        field.insert("id", JsonField::Int(123));
-        let result = field.stringify();
+            if dry_run { connection.dry_run(); }
 
-        self.json.push(field);
-
-        if !self.dry_run {
-            fs::write(&self.file, self.json.stringify()).unwrap();            
+            connections.insert(file_stem, Arc::new(RwLock::new(connection)));
         }
+        println!("");
 
-        result
+        Self { connections }
+    }
+
+    pub fn get_entry(&self, entrypoint: OsString) -> Arc<RwLock<Connection>> {
+        Arc::clone(self.connections.get(&entrypoint).unwrap())
     }
 }
+

@@ -1,27 +1,24 @@
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::{ffi::OsString, net::TcpStream};
+use std::net::TcpStream;
 use std::io::prelude::*;
 
+use crate::db::connection::Connection;
 use crate::json::field::JsonField;
 use crate::server::{
     StatusCode,
     response::ResponseBuilder,
     request::Request
 };
-use crate::db::JsonDbConnection;
 
 pub fn get(
     request: Request,
     mut stream: TcpStream,
-    entrypoint: OsString,
-    jsondb_connections: Arc<RwLock<HashMap<OsString, JsonDbConnection>>>
+    connection: Arc<RwLock<Connection>>
 ) {
     let content;
     {
-        let connections = jsondb_connections.read().unwrap();
-        let connection = connections.get(&entrypoint).unwrap();
-        content = connection.read();    
+        let connection = connection.read().unwrap();
+        content = connection.read();
     }
 
     let response = ResponseBuilder::new()
@@ -37,8 +34,7 @@ pub fn get(
 pub fn post(
     request: Request,
     mut stream: TcpStream,
-    entrypoint: OsString,
-    jsondb_connections: Arc<RwLock<HashMap<OsString, JsonDbConnection>>>
+    connection: Arc<RwLock<Connection>>
 ) {
     // Use this to get the request body
     let body = request.body.as_ref().unwrap();
@@ -46,8 +42,7 @@ pub fn post(
 
     let response_body;
     {
-        let connections = jsondb_connections.read().unwrap();
-        let connection = connections.get(&entrypoint).unwrap();
+        let connection = connection.write().unwrap();
         response_body = connection.insert(json);
     }
 
