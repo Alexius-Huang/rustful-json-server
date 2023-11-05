@@ -12,6 +12,7 @@ use std::net::{TcpListener, TcpStream};
 use std::fs;
 use std::process;
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::db::JsonDb;
 
@@ -117,13 +118,11 @@ impl Server {
         println!("Listening on localhost:{}...", self.port);
         for stream in self.listener.incoming() {
             let stream = stream.unwrap();
-            let verbose = self.verbose;
             let main_entrypoints = Arc::clone(main_entrypoints);
             let jsondb = Arc::clone(self.jsondb.as_ref().unwrap());
 
             pool.execute(move || Self::handle_connection(
                 stream,
-                verbose,
                 main_entrypoints,
                 jsondb
             ));
@@ -132,26 +131,26 @@ impl Server {
 
     fn handle_connection(
         mut stream: TcpStream,
-        verbose: bool,
         main_entrypoints: Arc<HashSet<OsString>>,
         jsondb: Arc<JsonDb>
     ) {
         let request = Request::new(&mut stream);
+        if request.is_err() {
+            return Response::not_found("HTTP/1.1".to_owned(), stream)
+        }
+        let request = request.unwrap();
 
-        // TODO: Create logging queue for proper logging
-        request.log(verbose);
-    
         let mut path_segment = request.url.iter();
         path_segment.next();
 
         let entrypoint = path_segment.next();
         if entrypoint.is_none() {
-            return Response::not_found(request, stream);
+            return Response::not_found(request.version, stream);
         }
 
         let entrypoint = entrypoint.unwrap().to_owned();
         if !main_entrypoints.contains(&entrypoint) {
-            return Response::not_found(request, stream);
+            return Response::not_found(request.version, stream);
         }
 
         let connection = Arc::clone(&jsondb.get_entry(entrypoint));
@@ -166,7 +165,7 @@ impl Server {
                 stream,
                 connection
             ),
-            _ => return Response::not_found(request, stream)
+            _ => return Response::not_found(request.version, stream)
         }
     }
 }

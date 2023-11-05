@@ -18,7 +18,7 @@ pub enum JsonField {
     String(String),
     Boolean(bool),
     Object(WrappedJsonObject),
-    Array(WrappedJsonArray),
+    Array(RwLock<JsonArray>),
     Null
 }
 

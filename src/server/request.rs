@@ -3,7 +3,7 @@ use std::{
     net::TcpStream,
     io::{prelude::*, BufReader},
     path::PathBuf,
-    convert::From
+    convert::From, time::Instant
 };
 
 #[derive(Debug)]
@@ -17,20 +17,20 @@ pub enum RequestMethod {
 
 impl From<&str> for RequestMethod {
     fn from(value: &str) -> Self {
-        match value {
+        match value.to_ascii_uppercase().as_str() {
             "GET" => Self::GET,
             "POST" => Self::POST,
             "PUT" => Self::PUT,
             "PATCH" => Self::PATCH,
             "DELETE" => Self::DELETE,
-            _ => panic!(
-                "Failed to initialize RequstMethod from string"
-            )
+            _ => Self::GET
+            // _ => panic!("{}", format!("Failed to initialize RequstMethod from \"{}\"", value))
         }
     }
 }
 
 pub struct Request {
+    start_time: Instant,
     pub method: RequestMethod,
     pub url: PathBuf,
     url_string: String,
@@ -42,15 +42,28 @@ pub struct Request {
 pub struct RequestInitializationError(String);
 
 impl Request {
-    pub fn new(mut stream: &TcpStream) -> Self {
+    pub fn new(mut stream: &TcpStream) -> Result<Self, String> {
         let mut buf_reader = BufReader::new(&mut stream);
         let mut request_info = String::new();
-        buf_reader.read_line(&mut request_info).unwrap();
+
+        // TODO: Figure out a way to handle errors!
+        if buf_reader.read_line(&mut request_info).is_err() {
+            return Err("Empty Request".to_owned());
+        };
 
         let mut request_info = request_info.split(" ");
-        let method = RequestMethod::from(request_info.next().unwrap());
+        let method = request_info.next();
+        if method.is_none() {
+            return Err("Empty Request Method".to_owned());
+        }
+        let method = RequestMethod::from(method.unwrap());
 
-        let url_str = request_info.next().unwrap();
+        let url_str = request_info.next();
+        if url_str.is_none() {
+            return Err("Empty Request URL".to_owned());
+        }
+        let url_str = url_str.unwrap();
+
         let url = PathBuf::from(url_str);
         let url_string = url_str.to_owned();
         let version = request_info.next().unwrap().trim_end().to_owned();
@@ -58,7 +71,7 @@ impl Request {
         let mut headers: HashMap<String, String> = HashMap::new();
         let mut message = String::new();
         loop {
-            let size = buf_reader.read_line(&mut message).unwrap();// lines.next().unwrap().unwrap();
+            let size = buf_reader.read_line(&mut message).unwrap();
             if size < 3 { break; }
 
             let header = message.clone();
@@ -78,11 +91,20 @@ impl Request {
             body = Some(String::from_utf8(buffer).unwrap());
         }
 
-        Self { method, url, url_string, version, headers, body }
+        Ok(Self {
+            method,
+            url,
+            url_string,
+            version,
+            headers,
+            body,
+            start_time: Instant::now()
+        })
     }
 
     pub fn log(&self, verbose: bool) {
-        println!("{:?} :: {}", self.method, self.url_string);
+        let duration = Instant::now() - self.start_time;
+        println!("{:?} :: {} {:?}", self.method, self.url_string, duration);
 
         if verbose {
             for (key, value) in self.headers.iter() {

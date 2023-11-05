@@ -4,13 +4,12 @@ use std::{
     path::{PathBuf, Path},
     fs,
     collections::HashMap,
-    ffi::OsString,
-    sync::{Arc, RwLock}
+    ffi::OsString, sync::Arc
 };
 use self::connection::Connection;
 
 pub struct JsonDb {
-    connections: HashMap<OsString, Arc<RwLock<Connection>>>
+    connections: HashMap<OsString, Arc<Connection>>
 }
 
 impl JsonDb {
@@ -33,14 +32,14 @@ impl JsonDb {
 
             if dry_run { connection.dry_run(); }
 
-            connections.insert(file_stem, Arc::new(RwLock::new(connection)));
+            connections.insert(file_stem, Arc::new(connection));
         }
         println!("");
 
         Self { connections }
     }
 
-    pub fn get_entry(&self, entrypoint: OsString) -> Arc<RwLock<Connection>> {
+    pub fn get_entry(&self, entrypoint: OsString) -> Arc<Connection> {
         Arc::clone(self.connections.get(&entrypoint).unwrap())
     }
 }

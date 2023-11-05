@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::net::TcpStream;
 use std::io::prelude::*;
 
@@ -13,45 +13,39 @@ use crate::server::{
 pub fn get(
     request: Request,
     mut stream: TcpStream,
-    connection: Arc<RwLock<Connection>>
+    connection: Arc<Connection>
 ) {
-    let content;
-    {
-        let connection = connection.read().unwrap();
-        content = connection.read();
-    }
+    let content = connection.read();
 
     let response = ResponseBuilder::new()
         .set_status_code(StatusCode::Ok)
-        .set_protocol(request.version)
+        .set_protocol(request.version.clone())
         .set_content(content)
         .set_content_type("application/json".to_owned())
         .build();
 
+    request.log(false);
     stream.write_all(response.format().as_bytes()).unwrap();
 }
 
 pub fn post(
     request: Request,
     mut stream: TcpStream,
-    connection: Arc<RwLock<Connection>>
+    connection: Arc<Connection>
 ) {
     // Use this to get the request body
     let body = request.body.as_ref().unwrap();
     let json = JsonField::from(body.as_str());
 
-    let response_body;
-    {
-        let connection = connection.write().unwrap();
-        response_body = connection.insert(json);
-    }
+    let response_body = connection.insert(json);
 
     let response = ResponseBuilder::new()
         .set_status_code(StatusCode::Ok)
-        .set_protocol(request.version)
+        .set_protocol(request.version.clone())
         .set_content(response_body)
         .set_content_type("application/json".to_owned())
         .build();
 
+    request.log(false);
     stream.write_all(response.format().as_bytes()).unwrap();
 }

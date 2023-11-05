@@ -30,8 +30,8 @@ impl Response {
         response
     }
 
-    pub fn not_found(request: Request, mut stream: TcpStream) {
-        let response = ResponseBuilder::build_404(request);
+    pub fn not_found(version: String, mut stream: TcpStream) {
+        let response = ResponseBuilder::build_404(version);
         stream.write_all(response.format().as_bytes()).unwrap();
     }
 }
@@ -86,10 +86,10 @@ impl ResponseBuilder {
         }
     }
 
-    pub fn build_404(request: Request) -> Response {
+    pub fn build_404(version: String) -> Response {
         Self::new()
             .set_status_code(StatusCode::NotFound)
-            .set_protocol(request.version)
+            .set_protocol(version)
             .set_content(r#"{ "message": "404 Not Found" }"#.to_owned())
             .set_content_type("application/json".to_owned())
             .build()
