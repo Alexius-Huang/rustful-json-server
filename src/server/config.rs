@@ -5,7 +5,8 @@ pub struct Config {
     pub jsondb_dir: PathBuf,
     pub pool_capacity: Option<usize>,
     pub port: Option<usize>,
-    pub verbose: bool
+    pub verbose: bool,
+    pub dry_run: bool
 }
 
 impl Config {
@@ -19,7 +20,8 @@ impl Config {
             jsondb_dir: PathBuf::from(args[1].to_owned()),
             pool_capacity: None,
             port: None,
-            verbose: false
+            verbose: false,
+            dry_run: false
         };
 
         for i in 2..len {
@@ -56,6 +58,16 @@ impl Config {
                 };
 
                 self.verbose = value;
+                Ok(())
+            },
+            "--dry-run" => {
+                let value = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(format!(r#"The option "--dry-run" only accepts "true" or "false" value"#))
+                };
+
+                self.dry_run = value;
                 Ok(())
             },
             _ => {

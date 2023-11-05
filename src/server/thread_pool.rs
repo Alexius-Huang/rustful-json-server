@@ -19,8 +19,6 @@ struct Worker {
     thread: Option<JoinHandle<()>>
 }
 
-pub struct PoolCreationError(String);
-
 impl ThreadPool {
     /// Creates a ThreadPool
     /// 

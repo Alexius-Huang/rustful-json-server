@@ -26,6 +26,7 @@ pub struct Server {
     listener: TcpListener,
     pool_capacity: Option<usize>,
     verbose: bool,
+    dry_run: bool,
     jsondb_dir: PathBuf,
     jsondb_connections: Option<Arc<RwLock<HashMap<OsString, JsonDbConnection>>>>,
     main_entrypoints: Option<Arc<HashSet<OsString>>>
@@ -44,6 +45,7 @@ impl Server {
         let mut server = Self::new(port, config.jsondb_dir);
         server.pool_capacity = config.pool_capacity;
         server.verbose = config.verbose;
+        server.dry_run = config.dry_run;
 
         return server;
     }
@@ -60,6 +62,7 @@ impl Server {
             listener,
             pool_capacity: None,
             verbose: false,
+            dry_run: false,
             jsondb_dir,
             jsondb_connections: None,
             main_entrypoints: None
@@ -132,13 +135,16 @@ impl Server {
             println!("Connecting ... {}", file_name);
 
             let file_path = self.jsondb_dir.clone().join(file_name);
-            let connection = JsonDbConnection::new(file_path).unwrap_or_else(|err| {
+            let mut connection = JsonDbConnection::new(file_path).unwrap_or_else(|err| {
                 eprintln!(
                     r#"Encounter error while creating JSON database connection: {:?}"#,
                     err
                 );
                 process::exit(1);
             });
+
+            if self.dry_run { connection.dry_run(); }
+
             jsondb_connections.insert(file_stem, connection);
         }
         println!("");
@@ -149,7 +155,7 @@ impl Server {
         for entrypoint in main_entrypoints.iter() {
             let entrypoint = entrypoint.to_str().unwrap();
             println!("    GET :: /{}", entrypoint);
-            // println!("   POST :: /{}", entrypoint);
+            println!("   POST :: /{}", entrypoint);
             // println!("    PUT :: /{}/:id", entrypoint);
             // println!("  PATCH :: /{}/:id", entrypoint);
             // println!(" DELETE :: /{}/:id", entrypoint);

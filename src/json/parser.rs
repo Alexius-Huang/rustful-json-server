@@ -32,7 +32,7 @@ fn peek_next_non_white_space_char(start_index: usize, chars: &Vec<char>) -> Opti
     None
 }
 
-fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
+pub fn parse_json(content: &str, starting_index: usize) -> ParseJsonResult {
     let chars: Vec<char> = content.chars().collect();
     let mut result = JsonField::Null;
 

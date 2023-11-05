@@ -3,6 +3,9 @@ use std::{
     sync::RwLock
 };
 
+use core::convert::From;
+use super::parser;
+
 pub type JsonObject = HashMap<String, JsonField>;
 pub type WrappedJsonObject = RwLock<JsonObject>;
 pub type JsonArray = Vec<JsonField>;
@@ -17,6 +20,12 @@ pub enum JsonField {
     Object(WrappedJsonObject),
     Array(WrappedJsonArray),
     Null
+}
+
+impl From<&str> for JsonField {
+    fn from(content: &str) -> Self {
+        parser::parse_json(content, 0).unwrap().0
+    }
 }
 
 // RwLock doesn't have PartialEq trait
