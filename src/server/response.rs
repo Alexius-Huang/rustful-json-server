@@ -1,3 +1,6 @@
+use std::net::TcpStream;
+use std::io::prelude::*;
+
 use super::status_code::StatusCode;
 use super::request::Request;
 
@@ -25,6 +28,11 @@ impl Response {
         response.push_str(&self.content);
 
         response
+    }
+
+    pub fn not_found(request: Request, mut stream: TcpStream) {
+        let response = ResponseBuilder::build_404(request);
+        stream.write_all(response.format().as_bytes()).unwrap();
     }
 }
 

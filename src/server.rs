@@ -2,21 +2,21 @@ pub mod config;
 pub mod request;
 pub mod response;
 pub mod status_code;
-pub mod thread_pool;
+mod thread_pool;
+mod request_handler;
 
 use std::collections::{HashSet, HashMap};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::net::{TcpListener, TcpStream};
-use std::io::prelude::*;
 use std::fs::{self, DirEntry};
 use std::process;
 use std::sync::{Arc, RwLock};
 
 use crate::db::JsonDbConnection;
 
-use self::response::ResponseBuilder;
-use self::request::Request;
+use self::response::Response;
+use self::request::{Request, RequestMethod};
 use self::status_code::StatusCode;
 use self::thread_pool::ThreadPool;
 use self::config::Config;
@@ -176,28 +176,28 @@ impl Server {
 
         let entrypoint = path_segment.next();
         if entrypoint.is_none() {
-            let response = ResponseBuilder::build_404(request);
-            stream.write_all(response.format().as_bytes()).unwrap();
-            return;
+            return Response::not_found(request, stream);
         }
 
         let entrypoint = entrypoint.unwrap().to_owned();
         if !main_entrypoints.contains(&entrypoint) {
-            let response = ResponseBuilder::build_404(request);
-            stream.write_all(response.format().as_bytes()).unwrap();
-            return;
+            return Response::not_found(request, stream);
         }
 
-        let connections = jsondb_connections.read().unwrap();
-        let connection = connections.get(&entrypoint).unwrap();
-
-        let response = ResponseBuilder::new()
-            .set_status_code(StatusCode::Ok)
-            .set_protocol(request.version)
-            .set_content(connection.read())
-            .set_content_type("application/json".to_owned())
-            .build();
-    
-        stream.write_all(response.format().as_bytes()).unwrap();    
-    }    
+        match request.method {
+            RequestMethod::GET => request_handler::get(
+                request,
+                stream,
+                entrypoint,
+                jsondb_connections
+            ),
+            RequestMethod::POST => request_handler::post(
+                request,
+                stream,
+                entrypoint,
+                jsondb_connections
+            ),
+            _ => return Response::not_found(request, stream)
+        }
+    }
 }
