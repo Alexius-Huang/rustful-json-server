@@ -6,7 +6,7 @@ mod thread_pool;
 mod request_handler;
 
 use std::collections::HashSet;
-use std::ffi::OsString;
+use std::ffi::{OsString, OsStr};
 use std::path::{Path, PathBuf};
 use std::net::{TcpListener, TcpStream};
 use std::fs;
@@ -97,6 +97,7 @@ impl Server {
         for entrypoint in main_entrypoints.iter() {
             let entrypoint = entrypoint.to_str().unwrap();
             println!("    GET :: /{}", entrypoint);
+            println!("    GET :: /{}/:id", entrypoint);
             println!("   POST :: /{}", entrypoint);
             // println!("    PUT :: /{}/:id", entrypoint);
             // println!("  PATCH :: /{}/:id", entrypoint);
@@ -140,33 +141,58 @@ impl Server {
             return Response::not_found("HTTP/1.1".to_owned(), now, stream)
         }
         let request = request.unwrap();
+        let version = request.version.clone();
 
-        let mut path_segment = request.url.iter();
-        path_segment.next();
-
-        let entrypoint = path_segment.next();
-        if entrypoint.is_none() {
-            return Response::not_found(request.version, now, stream);
+        let path_segments: Vec<&OsStr> = request.url.iter().collect();
+        if path_segments.len() < 2 {
+            return Response::not_found(version, now, stream);
         }
 
-        let entrypoint = entrypoint.unwrap().to_owned();
+        let entrypoint = path_segments[1].to_owned();
         if !main_entrypoints.contains(&entrypoint) {
-            return Response::not_found(request.version, now, stream);
+            return Response::not_found(version, now, stream);
         }
 
         let connection = Arc::clone(&jsondb.get_entry(entrypoint));
-        match request.method {
-            RequestMethod::GET => request_handler::get(
-                request,
-                stream,
-                connection
-            ),
-            RequestMethod::POST => request_handler::post(
-                request,
-                stream,
-                connection
-            ),
-            _ => return Response::not_found(request.version, now, stream)
+
+        /* Get all or insert new record */
+        if path_segments.len() == 2 {
+            match request.method {
+                RequestMethod::GET => request_handler::get(
+                    request,
+                    stream,
+                    connection
+                ),
+                RequestMethod::POST => request_handler::post(
+                    request,
+                    stream,
+                    connection
+                ),
+                _ => Response::not_found(version, now, stream)
+            }
+            return;
+        }
+
+        /* Get specific record */
+        if path_segments.len() == 3 {
+            let id: i32 = match path_segments[2].to_os_string().into_string() {
+                Ok(string) => match string.parse() {
+                    Ok(value) => value,
+                    Err(_) => return Response::not_found(version, now, stream)
+                },
+                Err(_) => return Response::not_found(version, now, stream)
+            };
+
+            match request.method {
+                RequestMethod::GET => request_handler::get_id(
+                    request,
+                    stream,
+                    connection,
+                    id
+                ),
+                _ => Response::not_found(version, now, stream)
+            }
+            return;
         }
     }
 }

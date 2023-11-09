@@ -30,7 +30,7 @@ impl From<&str> for RequestMethod {
 }
 
 pub struct Request {
-    start_time: Instant,
+    pub start_time: Instant,
     pub method: RequestMethod,
     pub url: PathBuf,
     url_string: String,

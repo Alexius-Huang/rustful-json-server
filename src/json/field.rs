@@ -22,6 +22,17 @@ pub enum JsonField {
     Null
 }
 
+#[derive(PartialEq, Debug)]
+pub enum JsonFieldType {
+    Int,
+    Float,
+    String,
+    Boolean,
+    Object,
+    Array,
+    Null
+}
+
 impl From<&str> for JsonField {
     fn from(content: &str) -> Self {
         parser::parse_json(content, 0).unwrap().0
@@ -77,6 +88,52 @@ pub struct ParseJsonError(pub String);
 pub type ParseJsonResult = Result<(JsonField, usize), ParseJsonError>;
 
 impl JsonField {
+    pub fn is(&self, field_type: JsonFieldType) -> bool {
+        match &self {
+            Self::Int(_) if field_type == JsonFieldType::Int => true,
+            Self::Float(_) if field_type == JsonFieldType::Float => true,
+            Self::Boolean(_) if field_type == JsonFieldType::Boolean => true,
+            Self::String(_) if field_type == JsonFieldType::String => true,
+            Self::Array(_) if field_type == JsonFieldType::Array => true,
+            Self::Object(_) if field_type == JsonFieldType::Object => true,
+            Self::Null if field_type == JsonFieldType::Null => true,
+            _ => false
+        }
+    }
+
+    pub fn field_type(&self) -> JsonFieldType {
+        match &self {
+            Self::Int(_) => JsonFieldType::Int,
+            Self::Float(_) => JsonFieldType::Float,
+            Self::Boolean(_) => JsonFieldType::Boolean,
+            Self::String(_) => JsonFieldType::String,
+            Self::Array(_) => JsonFieldType::Array,
+            Self::Object(_) => JsonFieldType::Object,
+            Self::Null => JsonFieldType::Null,
+        }
+    }
+
+    pub fn unwrap_as_ref_array(&self) -> Result<&RwLock<JsonArray>, ParseJsonError> {
+        match self {
+            JsonField::Array(arr_lock) => return Ok(arr_lock),
+            _ => Err(ParseJsonError(format!("Expect to unwrap as JsonField::Array type, instead got: {:?}", self.field_type())))
+        }
+    }
+
+    pub fn unwrap_as_ref_object(&self) -> Result<&RwLock<JsonObject>, ParseJsonError> {
+        match self {
+            JsonField::Object(obj_lock) => return Ok(obj_lock),
+            _ => Err(ParseJsonError(format!("Expect to unwrap as JsonField::Object type, instead got: {:?}", self.field_type())))
+        }
+    }
+
+    pub fn unwrap_as_ref_int(&self) -> Result<&i32, ParseJsonError> {
+        match self {
+            JsonField::Int(value) => return Ok(value),
+            _ => Err(ParseJsonError(format!("Expect to unwrap as JsonField::Int type, instead got: {:?}", self.field_type())))
+        }
+    }
+
     pub fn new_json_obj() -> Self {
         Self::Object(RwLock::new(HashMap::new()))
     }
