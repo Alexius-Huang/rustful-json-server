@@ -1,5 +1,6 @@
 use std::net::TcpStream;
 use std::io::prelude::*;
+use std::time::Instant;
 
 use super::status_code::StatusCode;
 
@@ -30,9 +31,12 @@ impl Response {
         response
     }
 
-    pub fn not_found(version: String, mut stream: TcpStream) {
+    pub fn not_found(version: String, start_time: Instant, mut stream: TcpStream) {
         let response = ResponseBuilder::build_404(version);
-        stream.write_all(response.format().as_bytes()).unwrap();
+        match stream.write_all(response.format().as_bytes()) {
+            Ok(_) => println!("404: {:?}", Instant::now() - start_time),
+            Err(err) => println!("{err:?}")
+        }
     }
 }
 

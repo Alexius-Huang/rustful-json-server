@@ -12,7 +12,7 @@ use std::net::{TcpListener, TcpStream};
 use std::fs;
 use std::process;
 use std::sync::Arc;
-
+use std::time::Instant;
 
 use crate::db::JsonDb;
 
@@ -134,9 +134,10 @@ impl Server {
         main_entrypoints: Arc<HashSet<OsString>>,
         jsondb: Arc<JsonDb>
     ) {
-        let request = Request::new(&mut stream);
+        let now = Instant::now();
+        let request = Request::new(&mut stream, now);
         if request.is_err() {
-            return Response::not_found("HTTP/1.1".to_owned(), stream)
+            return Response::not_found("HTTP/1.1".to_owned(), now, stream)
         }
         let request = request.unwrap();
 
@@ -145,12 +146,12 @@ impl Server {
 
         let entrypoint = path_segment.next();
         if entrypoint.is_none() {
-            return Response::not_found(request.version, stream);
+            return Response::not_found(request.version, now, stream);
         }
 
         let entrypoint = entrypoint.unwrap().to_owned();
         if !main_entrypoints.contains(&entrypoint) {
-            return Response::not_found(request.version, stream);
+            return Response::not_found(request.version, now, stream);
         }
 
         let connection = Arc::clone(&jsondb.get_entry(entrypoint));
@@ -165,7 +166,7 @@ impl Server {
                 stream,
                 connection
             ),
-            _ => return Response::not_found(request.version, stream)
+            _ => return Response::not_found(request.version, now, stream)
         }
     }
 }

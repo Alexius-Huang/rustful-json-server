@@ -42,16 +42,13 @@ pub struct Request {
 pub struct RequestInitializationError(String);
 
 impl Request {
-    pub fn new(mut stream: &TcpStream) -> Result<Self, String> {
+    pub fn new(mut stream: &TcpStream, start_time: Instant) -> Result<Self, String> {        
         let mut buf_reader = BufReader::new(&mut stream);
         let mut request_info = String::new();
+        buf_reader.read_line(&mut request_info).unwrap();
 
         // TODO: Figure out a way to handle errors!
-        if buf_reader.read_line(&mut request_info).is_err() {
-            return Err("Empty Request".to_owned());
-        };
-
-        let mut request_info = request_info.split(" ");
+        let mut request_info = request_info.trim_end().split(" ");
         let method = request_info.next();
         if method.is_none() {
             return Err("Empty Request Method".to_owned());
@@ -98,7 +95,7 @@ impl Request {
             version,
             headers,
             body,
-            start_time: Instant::now()
+            start_time
         })
     }
 
